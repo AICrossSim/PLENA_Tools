@@ -21,7 +21,7 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = [
-    "utils",
+    "plena_utils",
     "aria-llama-ops",
     "verification",
 ]
