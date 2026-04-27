@@ -55,3 +55,37 @@ def load_toml_config(file_path, section_to_load=None, mode="BEHAVIOR"):
     # Get the mode section (BEHAVIOR or ANALYTIC)
     mode_section = full_toml.get(mode, {})
     return mode_section.get(section_to_load, {})
+
+
+def load_precision_from_svh(definitions_path):
+    """
+    Load precision settings from hardware SVH files.
+
+    Args:
+        definitions_path: Path to the definitions directory containing
+                         precision.svh and configuration.svh
+
+    Returns:
+        tuple: (precision_settings, config_settings)
+            precision_settings: dict with block_size, exp_width, man_width,
+                              scale_exp_width, int_width
+            config_settings: dict with raw config from configuration.svh
+    """
+    from pathlib import Path
+    definitions_path = Path(definitions_path)
+
+    precision_svh = definitions_path / "precision.svh"
+    config_svh = definitions_path / "configuration.svh"
+
+    precision = load_svh_settings(str(precision_svh))
+    config = load_svh_settings(str(config_svh))
+
+    precision_settings = {
+        "block_size": precision.get("BLOCK_DIM", 8),
+        "exp_width": precision.get("ACT_MXFP_EXP_WIDTH", 4),
+        "man_width": precision.get("ACT_MXFP_MANT_WIDTH", 3),
+        "scale_exp_width": precision.get("MX_SCALE_WIDTH", 8),
+        "int_width": precision.get("INT_DATA_WIDTH", 32),
+    }
+
+    return precision_settings, config
