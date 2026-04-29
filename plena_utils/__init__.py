@@ -35,3 +35,9 @@ from .torch_fp_conversion import (
 from .torch_fp_conversion import (
     split_bin as split_bin,
 )
+from .rand_gen import (
+    Random_MXFP_Tensor_Generator as Random_MXFP_Tensor_Generator,
+)
+from .rand_gen import (
+    Random_MXINT_Tensor_Generator as Random_MXINT_Tensor_Generator,
+)
