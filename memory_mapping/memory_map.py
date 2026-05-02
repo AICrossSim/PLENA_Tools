@@ -43,6 +43,8 @@ def generate_hbm(
     directory: Union[str, Path],
     hbm_row_width: int = 256,
     mode: str = "rtl",
+    instructions: List[int] = None,
+    instr_storage_offset: int = 8192,
 ) -> Path:
     """Generate HBM memory file from quantized MXFP data.
 
@@ -54,12 +56,14 @@ def generate_hbm(
         directory: Output directory path
         hbm_row_width: HBM row width in bits (default: 256)
         mode: "rtl" for .mem hex format, "sim" for .bin binary format
+        instructions: Optional list of 32-bit instruction words
+        instr_storage_offset: Byte offset for instruction storage (default: 8192)
 
     Returns:
         Path to the generated file
     """
     if mode == "rtl":
-        return _generate_hbm_mem(blocks, bias, element_width, bias_width, directory, hbm_row_width)
+        return _generate_hbm_mem(blocks, bias, element_width, bias_width, directory, hbm_row_width, instructions, instr_storage_offset)
     elif mode == "sim":
         return _generate_hbm_bin(blocks, bias, element_width, bias_width, directory, hbm_row_width)
     else:
@@ -73,16 +77,19 @@ def _generate_hbm_mem(
     bias_width: int,
     directory: Union[str, Path],
     hbm_row_width: int,
+    instructions: List[int] = None,
+    instr_storage_offset: int = 8192,
 ) -> Path:
     """Generate HBM .mem file (hex text format for RTL simulation).
 
     Format:
-        // HBM_ELEMENTS
         0xDATA_ROW_0
         0xDATA_ROW_1
         ...
-        // HBM_SCALES
         0xSCALE_ROW_0
+        ...
+        0xINSTR_0
+        0xINSTR_1
         ...
     """
     directory = Path(directory)
@@ -96,7 +103,6 @@ def _generate_hbm_mem(
 
     with open(output_file, "w") as f:
         # Write element section
-        f.write("// HBM_ELEMENTS\n")
         row_hex = ""
         count = 0
         for block in blocks:
@@ -113,7 +119,6 @@ def _generate_hbm_mem(
             f.write(f"0x{row_hex}\n")
 
         # Write scale section
-        f.write("// HBM_SCALES\n")
         row_hex = ""
         count = 0
         for b in bias:
@@ -127,6 +132,25 @@ def _generate_hbm_mem(
             padding_bits = (num_bias_per_row - count) * bias_width
             row_hex = "0" * (padding_bits // 4) + row_hex
             f.write(f"0x{row_hex}\n")
+
+        # Write instruction section (32-bit instructions packed into rows)
+        if instructions:
+            instr_width = 32  # Each instruction is 32 bits
+            num_instr_per_row = hbm_row_width // instr_width
+            row_hex = ""
+            count = 0
+            for instr in instructions:
+                row_hex = f"{instr:08X}" + row_hex
+                count += 1
+                if count >= num_instr_per_row:
+                    f.write(f"0x{row_hex}\n")
+                    row_hex = ""
+                    count = 0
+            if row_hex:
+                # Pad remaining row with zeros
+                padding_bits = (num_instr_per_row - count) * instr_width
+                row_hex = "0" * (padding_bits // 4) + row_hex
+                f.write(f"0x{row_hex}\n")
 
     return output_file
 
