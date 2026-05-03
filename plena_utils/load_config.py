@@ -89,3 +89,37 @@ def load_precision_from_svh(definitions_path):
     }
 
     return precision_settings, config
+
+
+def load_hardware_tile_sizes(definitions_path=None):
+    """
+    Load hardware tile size parameters (MLEN, BLEN, VLEN, etc.) from configuration.svh.
+
+    Args:
+        definitions_path: Path to the definitions directory containing configuration.svh.
+                         If None, uses the default src/definitions path.
+
+    Returns:
+        dict: Hardware tile sizes with keys:
+            - MLEN: Matrix tile size
+            - BLEN: Vector/batch tile size
+            - VLEN: Vector length
+            - HLEN: Head length (if defined)
+    """
+    from pathlib import Path
+
+    if definitions_path is None:
+        # Default to project's src/definitions directory
+        definitions_path = Path(__file__).resolve().parents[2] / "src" / "definitions"
+    else:
+        definitions_path = Path(definitions_path)
+
+    config_svh = definitions_path / "configuration.svh"
+    config = load_svh_settings(str(config_svh))
+
+    return {
+        "MLEN": config.get("MLEN", 16),
+        "BLEN": config.get("BLEN", 8),
+        "VLEN": config.get("VLEN", 16),
+        "HLEN": config.get("HLEN", 8),
+    }

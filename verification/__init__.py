@@ -23,6 +23,12 @@ from verification.view_mem import (
     view_bin_file_by_row_int,
     view_fpsram_bin_file,
 )
+from verification.verify_rtl_sim import (
+    parse_hbm_result_file,
+    verify_hbm,
+    compare_results,
+    mx_to_float,
+)
 
 __all__ = [
     # check_mem
@@ -46,4 +52,9 @@ __all__ = [
     "view_bin_file_by_row_fp",
     "view_bin_file_by_row_int",
     "view_fpsram_bin_file",
+    # verify_rtl_sim
+    "parse_hbm_result_file",
+    "verify_hbm",
+    "compare_results",
+    "mx_to_float",
 ]

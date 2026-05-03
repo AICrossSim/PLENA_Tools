@@ -21,6 +21,9 @@ from .load_config import (
 from .load_config import (
     load_toml_config as load_toml_config,
 )
+from .load_config import (
+    load_hardware_tile_sizes as load_hardware_tile_sizes,
+)
 from .logger import get_logger as get_logger
 from .logger import set_logging_verbosity as set_logging_verbosity
 from .torch_fp_conversion import (
