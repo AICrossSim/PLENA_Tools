@@ -346,6 +346,212 @@ def verify_hbm(
     return result
 
 
+def parse_vector_result_file(filepath: Path, row_width_bits: int = 192) -> List[int]:
+    """Parse vector SRAM result file.
+
+    File format (hex values, one per line):
+        DATA_ROW_0
+        DATA_ROW_1
+        ...
+
+    Args:
+        filepath: Path to vector_result.mem file
+        row_width_bits: Width of each row in bits (default: 192 for VLEN=16, FP12)
+
+    Returns:
+        List of row data values (as integers)
+    """
+    data = []
+
+    with open(filepath, 'r') as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith("//"):
+                continue
+
+            # Parse hex data (with or without 0x prefix)
+            try:
+                if line.startswith("0x") or line.startswith("0X"):
+                    data.append(int(line, 16))
+                else:
+                    data.append(int(line, 16))
+            except ValueError:
+                continue
+
+    return data
+
+
+def fp_to_float(
+    element: int,
+    exp_width: int = 6,
+    man_width: int = 5,
+) -> float:
+    """Convert FP format element to float.
+
+    Args:
+        element: Raw element data (uint, with sign+exp+mant)
+        exp_width: Exponent width (default: 6 for V_FP_EXP_WIDTH)
+        man_width: Mantissa width (default: 5 for V_FP_MANT_WIDTH)
+
+    Returns:
+        Float value
+    """
+    total_width = 1 + exp_width + man_width
+    mask = (1 << total_width) - 1
+    element = element & mask
+
+    # Extract fields
+    sign = (element >> (exp_width + man_width)) & 1
+    exp = (element >> man_width) & ((1 << exp_width) - 1)
+    man = element & ((1 << man_width) - 1)
+
+    bias = (1 << (exp_width - 1)) - 1  # bias = 31 for exp_width=6
+
+    if exp == 0:
+        # Subnormal or zero
+        if man == 0:
+            return 0.0
+        # Subnormal: implicit leading 0
+        val = (man / (2 ** man_width)) * (2 ** (1 - bias))
+    elif exp == (1 << exp_width) - 1:
+        # Inf/NaN
+        if man == 0:
+            return float('-inf') if sign else float('inf')
+        return float('nan')
+    else:
+        # Normal: implicit leading 1
+        val = (1 + man / (2 ** man_width)) * (2 ** (exp - bias))
+
+    return -val if sign else val
+
+
+def extract_fp_elements_from_row(
+    row_data: int,
+    num_elements: int = 16,
+    exp_width: int = 6,
+    man_width: int = 5,
+) -> List[float]:
+    """Extract FP elements from a row and convert to floats.
+
+    Args:
+        row_data: Row data as integer
+        num_elements: Number of elements per row (VLEN)
+        exp_width: FP exponent width
+        man_width: FP mantissa width
+
+    Returns:
+        List of float values
+    """
+    element_width = 1 + exp_width + man_width
+    element_mask = (1 << element_width) - 1
+
+    values = []
+    for i in range(num_elements):
+        elem = (row_data >> (i * element_width)) & element_mask
+        values.append(fp_to_float(elem, exp_width, man_width))
+
+    return values
+
+
+def verify_vram(
+    workload_dir: Path,
+    params: Dict,
+    verbose: bool = True,
+) -> Dict:
+    """Verify VRAM (vector SRAM) contents against golden result.
+
+    Uses FP12 format with V_FP_EXP_WIDTH=6, V_FP_MANT_WIDTH=5.
+
+    Args:
+        workload_dir: Path to workload build directory
+        params: Verification parameters
+        verbose: Print detailed output
+
+    Returns:
+        Verification result dictionary
+    """
+    vram_result_file = workload_dir / "vector_result.mem"
+    golden_file = workload_dir / "golden_result.pt"
+    if not golden_file.exists():
+        golden_file = workload_dir / "golden_result.txt"
+
+    if not vram_result_file.exists():
+        return {"error": f"VRAM result file not found: {vram_result_file}"}
+
+    if vram_result_file.stat().st_size == 0:
+        return {"error": "VRAM result file is empty (0 bytes)"}
+
+    if not golden_file.exists():
+        return {"error": f"Golden file not found: {golden_file}"}
+
+    # Parse VRAM result - uses FP12 format (6-bit exp, 5-bit mant)
+    vram_data = parse_vector_result_file(vram_result_file)
+
+    if not vram_data:
+        return {"error": "No data found in VRAM result file"}
+
+    # FP precision from precision.svh: V_FP_EXP_WIDTH=6, V_FP_MANT_WIDTH=5
+    exp_width = 6
+    man_width = 5
+    vlen = params.get("row_dim", 16)  # VLEN from config
+
+    # Extract parameters
+    start_row = params.get("vram_start_row_idx", params.get("start_row_idx", 0))
+    num_rows = params.get("vram_num_rows", params.get("num_rows", len(vram_data)))
+
+    if verbose:
+        print(f"\nVRAM file has {len(vram_data)} rows")
+        print(f"Checking rows {start_row} to {start_row + num_rows - 1}")
+        print(f"FP format: exp_width={exp_width}, man_width={man_width}, VLEN={vlen}")
+
+    # Extract all float values
+    simulated_values = []
+    for row_idx in range(start_row, min(start_row + num_rows, len(vram_data))):
+        row_floats = extract_fp_elements_from_row(
+            vram_data[row_idx],
+            num_elements=vlen,
+            exp_width=exp_width,
+            man_width=man_width,
+        )
+        simulated_values.extend(row_floats)
+
+    if not simulated_values:
+        return {"error": "No valid data extracted from VRAM"}
+
+    simulated = np.array(simulated_values, dtype=np.float32)
+
+    # Parse golden
+    golden = parse_golden_file(golden_file)
+
+    # Compare
+    result = compare_results(simulated, golden)
+    result["type"] = "vram"
+    result["rows_checked"] = min(num_rows, len(vram_data) - start_row)
+    result["fp_exp_width"] = exp_width
+    result["fp_man_width"] = man_width
+
+    if verbose:
+        print("\n" + "=" * 60)
+        print("VRAM Verification Results")
+        print("=" * 60)
+        print(f"  FP Format: {1 + exp_width + man_width}-bit (1s + {exp_width}e + {man_width}m)")
+        print(f"  Rows checked: {result['rows_checked']}")
+        print(f"  Elements compared: {result['num_compared']}")
+        print(f"  MSE: {result['mse']:.6e}")
+        print(f"  MAE: {result['mae']:.6e}")
+        print(f"  Max Error: {result['max_error']:.6f}")
+        print(f"  Match Rate: {result['match_rate']:.2f}%")
+        print(f"  Status: {'PASSED' if result['passed'] else 'FAILED'}")
+        print("=" * 60)
+
+        # Show sample values if verbose
+        if len(simulated_values) > 0:
+            print(f"\nFirst 8 simulated values: {simulated_values[:8]}")
+            print(f"First 8 golden values:    {list(golden[:8])}")
+
+    return result
+
+
 def main():
     """Main entry point for RTL simulation verification."""
     parser = argparse.ArgumentParser(
@@ -402,6 +608,13 @@ def main():
         hbm_result = verify_hbm(workload_dir, params, verbose=args.verbose)
         results["hbm"] = hbm_result
         if hbm_result.get("error") or not hbm_result.get("passed", False):
+            all_passed = False
+
+    # VRAM verification
+    if args.check_vram or params.get("check_vram", False):
+        vram_result = verify_vram(workload_dir, params, verbose=args.verbose)
+        results["vram"] = vram_result
+        if vram_result.get("error") or not vram_result.get("passed", False):
             all_passed = False
 
     # Summary
