@@ -26,8 +26,16 @@ from verification.view_mem import (
 from verification.verify_rtl_sim import (
     parse_hbm_result_file,
     verify_hbm,
+    verify_vram,
     compare_results,
     mx_to_float,
+    save_vector_result_as_fp,
+)
+from verification.view_vector_result import (
+    view_vector_result_as_fp,
+    view_vector_result_as_hex,
+    view_vector_result_as_binary,
+    parse_vector_result_file,
 )
 
 __all__ = [
@@ -55,6 +63,13 @@ __all__ = [
     # verify_rtl_sim
     "parse_hbm_result_file",
     "verify_hbm",
+    "verify_vram",
     "compare_results",
     "mx_to_float",
+    "save_vector_result_as_fp",
+    # view_vector_result
+    "view_vector_result_as_fp",
+    "view_vector_result_as_hex",
+    "view_vector_result_as_binary",
+    "parse_vector_result_file",
 ]

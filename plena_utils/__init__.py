@@ -26,21 +26,23 @@ from .load_config import (
 )
 from .logger import get_logger as get_logger
 from .logger import set_logging_verbosity as set_logging_verbosity
-from .torch_fp_conversion import (
+
+# Re-export from new location (plena_quant)
+from plena_quant.mxfp.utils import (
     bin_2_fp as bin_2_fp,
 )
-from .torch_fp_conversion import (
+from plena_quant.mxfp.utils import (
     fp_2_bin as fp_2_bin,
 )
-from .torch_fp_conversion import (
+from plena_quant.mxfp.utils import (
     pack_fp_to_bin as pack_fp_to_bin,
 )
-from .torch_fp_conversion import (
+from plena_quant.mxfp.utils import (
     split_bin as split_bin,
 )
-from .rand_gen import (
+from plena_quant.mxfp.rand_gen import (
     Random_MXFP_Tensor_Generator as Random_MXFP_Tensor_Generator,
 )
-from .rand_gen import (
+from plena_quant.mxint.rand_gen import (
     Random_MXINT_Tensor_Generator as Random_MXINT_Tensor_Generator,
 )

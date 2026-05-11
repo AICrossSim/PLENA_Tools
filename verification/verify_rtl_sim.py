@@ -453,19 +453,102 @@ def extract_fp_elements_from_row(
     return values
 
 
+def save_vector_result_as_fp(
+    filepath: Path,
+    output_path: Path,
+    vlen: int = 16,
+    exp_width: int = 6,
+    man_width: int = 5,
+    start_row: int = 0,
+    num_rows: Optional[int] = None,
+    format: str = "txt",
+) -> Path:
+    """Save vector_result.mem as floating point values to a file.
+
+    Args:
+        filepath: Path to vector_result.mem file
+        output_path: Path to output file (without extension)
+        vlen: Number of elements per row (VLEN)
+        exp_width: FP exponent width (V_FP_EXP_WIDTH)
+        man_width: FP mantissa width (V_FP_MANT_WIDTH)
+        start_row: Starting row index
+        num_rows: Number of rows to process (None = all)
+        format: Output format - "txt" (human readable) or "mem" (one value per line)
+
+    Returns:
+        Path to the created output file
+    """
+    vram_data = parse_vector_result_file(filepath)
+    if not vram_data:
+        raise ValueError(f"No data found in {filepath}")
+
+    total_rows = len(vram_data)
+    end_row = total_rows if num_rows is None else min(start_row + num_rows, total_rows)
+
+    element_width = 1 + exp_width + man_width
+    fp_format = f"FP{element_width} (1s + {exp_width}e + {man_width}m)"
+
+    # Extract all FP values
+    all_fp_values = []
+    row_fp_values = []
+    for row_idx in range(start_row, end_row):
+        row_floats = extract_fp_elements_from_row(
+            vram_data[row_idx],
+            num_elements=vlen,
+            exp_width=exp_width,
+            man_width=man_width,
+        )
+        row_fp_values.append((row_idx, row_floats))
+        all_fp_values.extend(row_floats)
+
+    # Determine output file path
+    if format == "mem":
+        out_file = output_path.with_suffix(".fp.mem")
+    else:
+        out_file = output_path.with_suffix(".fp.txt")
+
+    with open(out_file, 'w') as f:
+        if format == "txt":
+            # Human-readable format with header
+            f.write(f"# Vector Result FP Values\n")
+            f.write(f"# Source: {filepath}\n")
+            f.write(f"# VLEN: {vlen}, Format: {fp_format}\n")
+            f.write(f"# Rows: {start_row} to {end_row - 1} ({end_row - start_row} rows)\n")
+            f.write(f"# Total elements: {len(all_fp_values)}\n")
+            f.write("#\n")
+            for row_idx, row_floats in row_fp_values:
+                f.write(f"Row {row_idx:4d}: ")
+                f.write(" ".join(f"{v:12.6f}" for v in row_floats))
+                f.write("\n")
+        else:
+            # .mem format - one value per line for easy parsing
+            f.write(f"// Vector Result FP Values (VLEN={vlen}, {fp_format})\n")
+            f.write(f"// Source: {filepath}\n")
+            f.write(f"// Rows: {start_row} to {end_row - 1}\n")
+            for row_idx, row_floats in row_fp_values:
+                f.write(f"// Row {row_idx}\n")
+                for v in row_floats:
+                    f.write(f"{v:.8e}\n")
+
+    return out_file
+
+
 def verify_vram(
     workload_dir: Path,
     params: Dict,
     verbose: bool = True,
+    save_fp_result: bool = True,
 ) -> Dict:
     """Verify VRAM (vector SRAM) contents against golden result.
 
-    Uses FP12 format with V_FP_EXP_WIDTH=6, V_FP_MANT_WIDTH=5.
+    Uses configurable FP format from params or defaults to FP12
+    (V_FP_EXP_WIDTH=6, V_FP_MANT_WIDTH=5).
 
     Args:
         workload_dir: Path to workload build directory
-        params: Verification parameters
+        params: Verification parameters (can include v_fp_exp_width, v_fp_man_width)
         verbose: Print detailed output
+        save_fp_result: Save FP-converted values to file (default: True)
 
     Returns:
         Verification result dictionary
@@ -484,16 +567,16 @@ def verify_vram(
     if not golden_file.exists():
         return {"error": f"Golden file not found: {golden_file}"}
 
-    # Parse VRAM result - uses FP12 format (6-bit exp, 5-bit mant)
+    # Parse VRAM result
     vram_data = parse_vector_result_file(vram_result_file)
 
     if not vram_data:
         return {"error": "No data found in VRAM result file"}
 
-    # FP precision from precision.svh: V_FP_EXP_WIDTH=6, V_FP_MANT_WIDTH=5
-    exp_width = 6
-    man_width = 5
-    vlen = params.get("row_dim", 16)  # VLEN from config
+    # FP precision - configurable via params, defaults from precision.svh
+    exp_width = params.get("v_fp_exp_width", 6)
+    man_width = params.get("v_fp_man_width", 5)
+    vlen = params.get("row_dim", params.get("vlen", 16))
 
     # Extract parameters
     start_row = params.get("vram_start_row_idx", params.get("start_row_idx", 0))
@@ -504,8 +587,9 @@ def verify_vram(
         print(f"Checking rows {start_row} to {start_row + num_rows - 1}")
         print(f"FP format: exp_width={exp_width}, man_width={man_width}, VLEN={vlen}")
 
-    # Extract all float values
+    # Extract all float values (row by row for saving)
     simulated_values = []
+    row_fp_values = []
     for row_idx in range(start_row, min(start_row + num_rows, len(vram_data))):
         row_floats = extract_fp_elements_from_row(
             vram_data[row_idx],
@@ -513,12 +597,35 @@ def verify_vram(
             exp_width=exp_width,
             man_width=man_width,
         )
+        row_fp_values.append((row_idx, row_floats))
         simulated_values.extend(row_floats)
 
     if not simulated_values:
         return {"error": "No valid data extracted from VRAM"}
 
     simulated = np.array(simulated_values, dtype=np.float32)
+
+    # Save FP results to file if requested
+    fp_output_file = None
+    if save_fp_result:
+        fp_output_file = workload_dir / "vector_result.fp.txt"
+        element_width = 1 + exp_width + man_width
+        fp_format = f"FP{element_width} (1s + {exp_width}e + {man_width}m)"
+
+        with open(fp_output_file, 'w') as f:
+            f.write(f"# Vector Result FP Values\n")
+            f.write(f"# Source: {vram_result_file}\n")
+            f.write(f"# VLEN: {vlen}, Format: {fp_format}\n")
+            f.write(f"# Rows: {start_row} to {start_row + num_rows - 1}\n")
+            f.write(f"# Total elements: {len(simulated_values)}\n")
+            f.write("#\n")
+            for row_idx, row_floats in row_fp_values:
+                f.write(f"Row {row_idx:4d}: ")
+                f.write(" ".join(f"{v:12.6f}" for v in row_floats))
+                f.write("\n")
+
+        if verbose:
+            print(f"FP results saved to: {fp_output_file}")
 
     # Parse golden
     golden = parse_golden_file(golden_file)
@@ -529,12 +636,16 @@ def verify_vram(
     result["rows_checked"] = min(num_rows, len(vram_data) - start_row)
     result["fp_exp_width"] = exp_width
     result["fp_man_width"] = man_width
+    result["vlen"] = vlen
+    if fp_output_file:
+        result["fp_output_file"] = str(fp_output_file)
 
     if verbose:
         print("\n" + "=" * 60)
         print("VRAM Verification Results")
         print("=" * 60)
         print(f"  FP Format: {1 + exp_width + man_width}-bit (1s + {exp_width}e + {man_width}m)")
+        print(f"  VLEN: {vlen}")
         print(f"  Rows checked: {result['rows_checked']}")
         print(f"  Elements compared: {result['num_compared']}")
         print(f"  MSE: {result['mse']:.6e}")
@@ -580,6 +691,35 @@ def main():
         default=False,
         help="Check VRAM contents"
     )
+    parser.add_argument(
+        "--save-fp",
+        action="store_true",
+        default=True,
+        help="Save FP-converted VRAM results to .fp.txt file (default: True)"
+    )
+    parser.add_argument(
+        "--no-save-fp",
+        action="store_true",
+        help="Disable saving FP-converted results"
+    )
+    parser.add_argument(
+        "--vlen",
+        type=int,
+        default=None,
+        help="Override VLEN (elements per row)"
+    )
+    parser.add_argument(
+        "--exp-width",
+        type=int,
+        default=None,
+        help="Override V_FP_EXP_WIDTH (default: from params or 6)"
+    )
+    parser.add_argument(
+        "--man-width",
+        type=int,
+        default=None,
+        help="Override V_FP_MANT_WIDTH (default: from params or 5)"
+    )
     args = parser.parse_args()
 
     workload_dir = Path(args.workload_dir)
@@ -596,9 +736,22 @@ def main():
     with open(params_file) as f:
         params = json.load(f)
 
+    # Override params with command line arguments
+    if args.vlen is not None:
+        params["vlen"] = args.vlen
+        params["row_dim"] = args.vlen
+    if args.exp_width is not None:
+        params["v_fp_exp_width"] = args.exp_width
+    if args.man_width is not None:
+        params["v_fp_man_width"] = args.man_width
+
     if args.verbose:
         print(f"Verification parameters loaded from: {params_file}")
         print(f"Workload type: {params.get('workload_type', 'unknown')}")
+        if args.exp_width or args.man_width or args.vlen:
+            print(f"Overrides: vlen={params.get('vlen')}, "
+                  f"exp_width={params.get('v_fp_exp_width')}, "
+                  f"man_width={params.get('v_fp_man_width')}")
 
     results = {}
     all_passed = True
@@ -611,8 +764,13 @@ def main():
             all_passed = False
 
     # VRAM verification
+    save_fp = args.save_fp and not args.no_save_fp
     if args.check_vram or params.get("check_vram", False):
-        vram_result = verify_vram(workload_dir, params, verbose=args.verbose)
+        vram_result = verify_vram(
+            workload_dir, params,
+            verbose=args.verbose,
+            save_fp_result=save_fp
+        )
         results["vram"] = vram_result
         if vram_result.get("error") or not vram_result.get("passed", False):
             all_passed = False
@@ -627,6 +785,8 @@ def main():
         else:
             status = "PASSED" if result.get("passed", False) else "FAILED"
             print(f"  {check_type.upper()}: {status} (match rate: {result.get('match_rate', 0):.2f}%)")
+            if "fp_output_file" in result:
+                print(f"    FP results: {result['fp_output_file']}")
     print("=" * 60)
     print(f"Overall: {'PASSED' if all_passed else 'FAILED'}")
     print("=" * 60)
