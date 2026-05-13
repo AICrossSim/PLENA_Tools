@@ -10,6 +10,12 @@ from .config import (
 from .config import (
     patch_config_svh_from_toml as patch_config_svh_from_toml,
 )
+from .config import (
+    calculate_instr_storage_offset_from_shapes as calculate_instr_storage_offset_from_shapes,
+)
+from .config import (
+    update_instruction_storage_offset as update_instruction_storage_offset,
+)
 from .debugger import _get_similarity as _get_similarity
 from .debugger import set_excepthook as set_excepthook
 from .load_config import (
@@ -23,6 +29,9 @@ from .load_config import (
 )
 from .load_config import (
     load_hardware_tile_sizes as load_hardware_tile_sizes,
+)
+from .load_config import (
+    get_quant_config_for_format as get_quant_config_for_format,
 )
 from .logger import get_logger as get_logger
 from .logger import set_logging_verbosity as set_logging_verbosity

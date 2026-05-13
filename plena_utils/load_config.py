@@ -139,3 +139,47 @@ def load_hardware_tile_sizes(definitions_path=None):
         "VLEN": config.get("VLEN", 16),
         "HLEN": config.get("HLEN", 8),
     }
+
+
+def get_quant_config_for_format(mx_format: str, precision_settings: dict) -> dict:
+    """Get the appropriate quant_config based on mx_format.
+
+    Args:
+        mx_format: "mxfp", "mxint", or None (auto-detect from precision_settings)
+        precision_settings: Dict with precision settings from precision.svh
+
+    Returns:
+        quant_config dict with appropriate parameters for the format
+    """
+    # Determine format
+    use_mxint = False
+    if mx_format is not None:
+        use_mxint = mx_format.lower() == "mxint"
+    else:
+        use_mxint = precision_settings.get("mxint_enable", 0) == 1
+
+    block_size = precision_settings.get("block_size", 8)
+
+    if use_mxint:
+        # MXINT: element is [sign(1)][magnitude(int_width-1)]
+        mxint_width = precision_settings.get("mxint_width", 8)
+        return {
+            "exp_width": precision_settings.get("scale_exp_width", 8),  # Shared scale width
+            "man_width": mxint_width,  # Total integer width (including sign)
+            "exp_bias_width": precision_settings.get("scale_exp_width", 8),
+            "block_size": [1, block_size],
+            "int_width": precision_settings.get("int_width", 32),
+            "skip_first_dim": False,
+            "format": "mxint",
+        }
+    else:
+        # MXFP: element is [sign(1)][exp(exp_width)][man(man_width)]
+        return {
+            "exp_width": precision_settings.get("exp_width", 4),
+            "man_width": precision_settings.get("man_width", 3),
+            "exp_bias_width": precision_settings.get("scale_exp_width", 8),
+            "block_size": [1, block_size],
+            "int_width": precision_settings.get("int_width", 32),
+            "skip_first_dim": False,
+            "format": "mxfp",
+        }

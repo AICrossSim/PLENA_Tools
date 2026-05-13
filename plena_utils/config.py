@@ -1,6 +1,8 @@
 import argparse
+import math
 import os
 import re
+from pathlib import Path
 
 import toml
 
@@ -127,6 +129,82 @@ def auto_config(
 
     modify_toml_file(toml_path=toml_path, section="PRECISION", config_params=settings)
     patch_config_svh_from_toml(toml_path=toml_path, section="PRECISION", svh_path=precision_svh_path)
+
+
+def calculate_instr_storage_offset_from_shapes(
+    tensor_shapes: list,
+    precision_settings: dict,
+    hbm_row_width: int = 256,
+) -> int:
+    """Calculate instruction storage offset based on total data size.
+
+    The offset is computed as the byte address right after all tensor data
+    (elements + scales for each tensor).
+
+    Args:
+        tensor_shapes: List of tensor shapes, e.g., [(8, 128), (128, 256)]
+        precision_settings: Dict with precision settings from precision.svh
+        hbm_row_width: HBM row width in bits
+
+    Returns:
+        Byte offset for instruction storage
+    """
+    use_mxint = precision_settings.get("mxint_enable", 0) == 1
+    block_size = precision_settings.get("block_size", 8)
+
+    if use_mxint:
+        element_width = precision_settings.get("mxint_width", 8)
+    else:
+        element_width = precision_settings.get("exp_width", 4) + precision_settings.get("man_width", 3) + 1
+
+    scale_width = precision_settings.get("scale_exp_width", 8)
+    bytes_per_row = hbm_row_width // 8
+
+    total_rows = 0
+    for shape in tensor_shapes:
+        num_elements = 1
+        for dim in shape:
+            num_elements *= dim
+
+        # Calculate element rows
+        elements_per_row = hbm_row_width // (element_width * block_size) * block_size
+        num_element_rows = math.ceil(num_elements / elements_per_row) if elements_per_row > 0 else 0
+
+        # Calculate scale rows
+        num_scales = num_elements // block_size
+        scales_per_row = hbm_row_width // scale_width if scale_width > 0 else 1
+        num_scale_rows = math.ceil(num_scales / scales_per_row) if scales_per_row > 0 else 0
+
+        total_rows += num_element_rows + num_scale_rows
+
+    return total_rows * bytes_per_row
+
+
+def update_instruction_storage_offset(instr_offset: int, config_path) -> None:
+    """Update INSTRUCTION_STORAGE_OFFSET in configuration.svh.
+
+    Args:
+        instr_offset: The computed byte offset for instruction storage
+        config_path: Path to definitions directory or configuration.svh file
+    """
+    config_path = Path(config_path)
+    if config_path.is_dir():
+        config_file = config_path / "configuration.svh"
+    else:
+        config_file = config_path
+
+    with open(config_file, 'r') as f:
+        content = f.read()
+
+    # Pattern to match INSTRUCTION_STORAGE_OFFSET line (captures everything up to end of line)
+    pattern = r"(localparam\s+INSTRUCTION_STORAGE_OFFSET\s*=\s*)[^;\n]+;[^\n]*"
+    hex_value = f"32'h{instr_offset:X}"
+    replacement = rf"\g<1>{hex_value};  // Byte offset computed by workload generator = {instr_offset}"
+
+    new_content = re.sub(pattern, replacement, content)
+
+    with open(config_file, 'w') as f:
+        f.write(new_content)
 
 
 def main():
