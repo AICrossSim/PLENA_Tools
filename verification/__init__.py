@@ -29,6 +29,7 @@ from verification.verify_rtl_sim import (
     verify_vram,
     compare_results,
     mx_to_float,
+    mxint_to_float,
     save_vector_result_as_fp,
 )
 from verification.view_vector_result import (
@@ -36,6 +37,17 @@ from verification.view_vector_result import (
     view_vector_result_as_hex,
     view_vector_result_as_binary,
     parse_vector_result_file,
+)
+from verification.hbm_interpreter import (
+    read_hbm_mem_file,
+    interpret_hbm_to_float,
+    compare_with_original,
+    dump_hbm_raw,
+)
+from verification.verify_mxint_encoding import (
+    verify_mxint_encoding,
+    read_hbm_mxint,
+    mxint_to_float,
 )
 
 __all__ = [
@@ -66,10 +78,20 @@ __all__ = [
     "verify_vram",
     "compare_results",
     "mx_to_float",
+    "mxint_to_float",
     "save_vector_result_as_fp",
     # view_vector_result
     "view_vector_result_as_fp",
     "view_vector_result_as_hex",
     "view_vector_result_as_binary",
     "parse_vector_result_file",
+    # hbm_interpreter
+    "read_hbm_mem_file",
+    "interpret_hbm_to_float",
+    "compare_with_original",
+    "dump_hbm_raw",
+    # verify_mxint_encoding
+    "verify_mxint_encoding",
+    "read_hbm_mxint",
+    "mxint_to_float",
 ]

@@ -120,7 +120,10 @@ def mx_to_float(
     scale_width: int = 8,
     block_size: int = 8,
 ) -> np.ndarray:
-    """Convert MX format data to float.
+    """Convert MXFP format data to float.
+
+    MXFP format: Each element has [sign(1)][exponent(exp_width)][mantissa(man_width)]
+    with a shared block scale.
 
     Args:
         elements: Raw element data (uint8 array)
@@ -168,6 +171,59 @@ def mx_to_float(
         # Apply scale (E8M0 format)
         scale_val = 2 ** (scale - scale_bias)
         values.append(elem_val * scale_val)
+
+    return np.array(values, dtype=np.float32)
+
+
+def mxint_to_float(
+    elements: np.ndarray,
+    scales: np.ndarray,
+    int_width: int = 8,
+    scale_width: int = 8,
+    block_size: int = 8,
+) -> np.ndarray:
+    """Convert MXINT format data to float.
+
+    MXINT format: Each element has [sign(1)][magnitude(int_width-1)]
+    with a shared block scale (exponent).
+
+    Value = (-1)^sign * (magnitude / 2^(int_width-1)) * 2^(scale - bias)
+
+    Args:
+        elements: Raw element data (uint8 array)
+        scales: Raw scale data (uint8 array)
+        int_width: Total integer width including sign bit (default: 8)
+        scale_width: Scale exponent width (default: 8)
+        block_size: Elements per block (default: 8)
+
+    Returns:
+        Float array of converted values
+    """
+    values = []
+    magnitude_bits = int_width - 1
+    magnitude_mask = (1 << magnitude_bits) - 1
+    scale_bias = (1 << (scale_width - 1)) - 1  # 127 for 8-bit scale
+
+    for i, elem in enumerate(elements):
+        block_idx = i // block_size
+        scale = scales[block_idx] if block_idx < len(scales) else scale_bias
+
+        # Parse element: [sign(1)][magnitude(int_width-1)]
+        sign = (elem >> magnitude_bits) & 1
+        magnitude = elem & magnitude_mask
+
+        # Convert to float
+        # Normalized mantissa = magnitude / 2^magnitude_bits (in range [0, 1))
+        normalized_mantissa = magnitude / (1 << magnitude_bits)
+
+        # Apply scale: 2^(scale - bias)
+        scale_val = 2 ** (int(scale) - scale_bias)
+
+        elem_val = normalized_mantissa * scale_val
+        if sign:
+            elem_val = -elem_val
+
+        values.append(elem_val)
 
     return np.array(values, dtype=np.float32)
 
@@ -275,9 +331,11 @@ def verify_hbm(
 ) -> Dict:
     """Verify HBM contents against golden result.
 
+    Supports both MXFP and MXINT formats based on params["mx_format"].
+
     Args:
         workload_dir: Path to workload build directory
-        params: Verification parameters
+        params: Verification parameters (should include "mx_format" for MXINT)
         verbose: Print detailed output
 
     Returns:
@@ -300,29 +358,50 @@ def verify_hbm(
     # Extract relevant parameters
     start_addr = params.get("result_hbm_start_byte", 0)
     num_elements = params.get("num_elements", 0)
-    exp_width = params.get("exp_width", 4)
-    man_width = params.get("man_width", 3)
     scale_width = params.get("scale_width", 8)
     block_size = params.get("block_size", 8)
     scale_offset = params.get("scale_offset")
+
+    # Determine format: MXINT or MXFP
+    mx_format = params.get("mx_format", "mxfp").lower()
+
+    if mx_format == "mxint":
+        int_width = params.get("man_width", 8)  # For MXINT, man_width is the int_width
+        mx_element_width = int_width
+    else:
+        exp_width = params.get("exp_width", 4)
+        man_width = params.get("man_width", 3)
+        mx_element_width = 1 + exp_width + man_width  # sign + exp + man
 
     # Extract elements and scales
     elements, scales = read_hbm_elements_and_scales(
         hbm_data,
         start_addr=start_addr,
         num_elements=num_elements,
+        mx_element_width=mx_element_width,
+        mx_scale_width=scale_width,
         block_size=block_size,
         scale_offset=scale_offset,
     )
 
-    # Convert to float
-    simulated = mx_to_float(
-        elements, scales,
-        exp_width=exp_width,
-        man_width=man_width,
-        scale_width=scale_width,
-        block_size=block_size,
-    )
+    # Convert to float based on format
+    if mx_format == "mxint":
+        simulated = mxint_to_float(
+            elements, scales,
+            int_width=int_width,
+            scale_width=scale_width,
+            block_size=block_size,
+        )
+        format_info = f"MXINT (int_width={int_width}, scale_width={scale_width})"
+    else:
+        simulated = mx_to_float(
+            elements, scales,
+            exp_width=exp_width,
+            man_width=man_width,
+            scale_width=scale_width,
+            block_size=block_size,
+        )
+        format_info = f"MXFP (exp={exp_width}, man={man_width}, scale={scale_width})"
 
     # Parse golden
     golden = parse_golden_file(golden_file)
@@ -330,11 +409,13 @@ def verify_hbm(
     # Compare
     result = compare_results(simulated, golden)
     result["type"] = "hbm"
+    result["mx_format"] = mx_format
 
     if verbose:
         print("\n" + "=" * 60)
         print("HBM Verification Results")
         print("=" * 60)
+        print(f"  Format: {format_info}")
         print(f"  Elements compared: {result['num_compared']}")
         print(f"  MSE: {result['mse']:.6e}")
         print(f"  MAE: {result['mae']:.6e}")

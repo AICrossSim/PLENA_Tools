@@ -57,18 +57,19 @@ def load_toml_config(file_path, section_to_load=None, mode="BEHAVIOR"):
     return mode_section.get(section_to_load, {})
 
 
-def load_precision_from_svh(definitions_path):
+def load_precision_from_svh(definitions_path, data_type="act"):
     """
     Load precision settings from hardware SVH files.
 
     Args:
         definitions_path: Path to the definitions directory containing
                          precision.svh and configuration.svh
+        data_type: Type of data to load precision for ("act", "kv", or "wt")
 
     Returns:
         tuple: (precision_settings, config_settings)
             precision_settings: dict with block_size, exp_width, man_width,
-                              scale_exp_width, int_width
+                              scale_exp_width, int_width, mxint_enable, mxint_width
             config_settings: dict with raw config from configuration.svh
     """
     from pathlib import Path
@@ -80,12 +81,27 @@ def load_precision_from_svh(definitions_path):
     precision = load_svh_settings(str(precision_svh))
     config = load_svh_settings(str(config_svh))
 
+    # Map data_type to parameter prefixes
+    prefix_map = {
+        "act": "ACT",
+        "kv": "KV",
+        "wt": "WT",
+    }
+    prefix = prefix_map.get(data_type.lower(), "ACT")
+
+    # MXFP settings
+    mxfp_exp_key = f"{prefix}_MXFP_EXP_WIDTH" if prefix == "ACT" else f"{prefix}_MX_EXP_WIDTH"
+    mxfp_man_key = f"{prefix}_MXFP_MANT_WIDTH" if prefix == "ACT" else f"{prefix}_MX_MANT_WIDTH"
+
     precision_settings = {
         "block_size": precision.get("BLOCK_DIM", 8),
-        "exp_width": precision.get("ACT_MXFP_EXP_WIDTH", 4),
-        "man_width": precision.get("ACT_MXFP_MANT_WIDTH", 3),
-        "scale_exp_width": precision.get("MX_SCALE_WIDTH", 8),
+        "exp_width": precision.get(mxfp_exp_key, 4),
+        "man_width": precision.get(mxfp_man_key, 3),
+        "scale_exp_width": precision.get(f"{prefix}_MX_SCALE_WIDTH", 8),
         "int_width": precision.get("INT_DATA_WIDTH", 32),
+        # MXINT settings
+        "mxint_enable": precision.get(f"{prefix}_MX_INT_ENABLE", 0),
+        "mxint_width": precision.get(f"{prefix}_MX_INT_WIDTH", 8),
     }
 
     return precision_settings, config
