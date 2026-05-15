@@ -1,7 +1,9 @@
 import os
 from pathlib import Path
 
-from cfl_tools import PROJECT_PATH
+# Derive project root: this file is at PLENA_Tools/sim_env_utils/build_sys_tools.py
+PROJECT_PATH = Path(__file__).resolve().parent.parent.parent
+
 from memory_mapping import generate_hbm
 from assembler.assembly_to_binary import AssemblyToBinary
 
