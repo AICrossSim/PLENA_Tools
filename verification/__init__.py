@@ -31,6 +31,8 @@ from verification.verify_rtl_sim import (
     mx_to_float,
     mxint_to_float,
     save_vector_result_as_fp,
+    save_golden_hbm,
+    save_golden_vram,
 )
 from verification.view_vector_result import (
     view_vector_result_as_fp,
@@ -80,6 +82,8 @@ __all__ = [
     "mx_to_float",
     "mxint_to_float",
     "save_vector_result_as_fp",
+    "save_golden_hbm",
+    "save_golden_vram",
     # view_vector_result
     "view_vector_result_as_fp",
     "view_vector_result_as_hex",

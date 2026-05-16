@@ -129,7 +129,6 @@ def read_hbm_mxint(hbm_path: Path, num_elements: int, block_size: int = 8,
         if actual_row_idx >= len(lines):
             break
         row_value = parse_hbm_mem_line(lines[actual_row_idx])
-
         scales_in_row = min(scales_per_row, num_blocks - scales_extracted)
 
         for scale_idx in range(scales_in_row):

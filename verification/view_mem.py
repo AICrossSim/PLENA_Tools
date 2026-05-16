@@ -225,7 +225,7 @@ if __name__ == "__main__":
 
     from verification.check_mem import compare_fpsram_with_golden, compare_vram_with_golden, print_comparison_results
 
-    params_file = os.path.join(script_dir, "transactional_emulator", "testbench", "build", "comparison_params.json")
+    params_file = os.path.join(script_dir, "transactional_emulator", "testbench", "build", "verification_params.json")
     with open(params_file) as f:
         params = json.load(f)
 
@@ -309,6 +309,8 @@ if __name__ == "__main__":
         print("\n" + "=" * 80)
         print("Comparison with Golden Output (VRAM)")
         print("=" * 80)
+        # Use vram_elements_per_batch if available, otherwise fall back to elements_per_batch
+        vram_elements = params.get("vram_elements_per_batch", params.get("elements_per_batch", 128))
         results = compare_vram_with_golden(
             vram_file,
             golden_file,
@@ -319,7 +321,7 @@ if __name__ == "__main__":
             start_row_idx=params["start_row_idx"],
             num_batches=params["num_batches"],
             num_rows=params["num_rows"],
-            elements_per_batch=params["elements_per_batch"],
+            elements_per_batch=vram_elements,
             use_stride_mode=params.get("use_stride_mode", True),
             use_slice_mode=params.get("use_slice_mode", False),
             slice_per_row=params.get("slice_per_row", None),

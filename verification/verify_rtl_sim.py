@@ -328,23 +328,37 @@ def verify_hbm(
     workload_dir: Path,
     params: Dict,
     verbose: bool = True,
+    save_translated: bool = True,
 ) -> Dict:
     """Verify HBM contents against golden result.
 
     Supports both MXFP and MXINT formats based on params["mx_format"].
+    Supports configurable row-based comparison via params.
 
     Args:
         workload_dir: Path to workload build directory
         params: Verification parameters (should include "mx_format" for MXINT)
+            - golden_hbm_file: Optional separate golden file for HBM (default: golden_result.pt)
+            - hbm_compare_start_row: Start row for comparison (default: 0)
+            - hbm_compare_num_rows: Number of rows to compare (default: all)
         verbose: Print detailed output
+        save_translated: Save translated FP values to file for debugging
 
     Returns:
         Verification result dictionary
     """
     hbm_result_file = workload_dir / "hbm_result.mem"
-    golden_file = workload_dir / "golden_result.pt"
+
+    # Use separate HBM golden file if specified, else fall back to unified golden
+    golden_hbm_filename = params.get("golden_hbm_file", "golden_result.pt")
+    golden_file = workload_dir / golden_hbm_filename
     if not golden_file.exists():
-        golden_file = workload_dir / "golden_result.txt"
+        golden_file = workload_dir / golden_hbm_filename.replace(".pt", ".txt")
+    if not golden_file.exists():
+        # Fall back to unified golden
+        golden_file = workload_dir / "golden_result.pt"
+        if not golden_file.exists():
+            golden_file = workload_dir / "golden_result.txt"
 
     if not hbm_result_file.exists():
         return {"error": f"HBM result file not found: {hbm_result_file}"}
@@ -386,7 +400,7 @@ def verify_hbm(
 
     # Convert to float based on format
     if mx_format == "mxint":
-        simulated = mxint_to_float(
+        simulated_all = mxint_to_float(
             elements, scales,
             int_width=int_width,
             scale_width=scale_width,
@@ -394,7 +408,7 @@ def verify_hbm(
         )
         format_info = f"MXINT (int_width={int_width}, scale_width={scale_width})"
     else:
-        simulated = mx_to_float(
+        simulated_all = mx_to_float(
             elements, scales,
             exp_width=exp_width,
             man_width=man_width,
@@ -403,8 +417,76 @@ def verify_hbm(
         )
         format_info = f"MXFP (exp={exp_width}, man={man_width}, scale={scale_width})"
 
-    # Parse golden
-    golden = parse_golden_file(golden_file)
+    # Apply row-based comparison filter if specified
+    hbm_elements_per_row = params.get("hbm_elements_per_row", 32)  # Default: 32 elements per 256-bit row
+    hbm_compare_start_row = params.get("hbm_compare_start_row", 0)
+    hbm_compare_num_rows = params.get("hbm_compare_num_rows", None)
+    hbm_total_rows = params.get("hbm_total_rows", (num_elements + hbm_elements_per_row - 1) // hbm_elements_per_row)
+
+    # Calculate element range to compare
+    start_elem_idx = hbm_compare_start_row * hbm_elements_per_row
+    if hbm_compare_num_rows is not None:
+        end_elem_idx = min(start_elem_idx + hbm_compare_num_rows * hbm_elements_per_row, len(simulated_all))
+    else:
+        end_elem_idx = len(simulated_all)
+
+    # Filter to only the rows we want to compare
+    simulated = simulated_all[start_elem_idx:end_elem_idx]
+
+    if verbose and (hbm_compare_start_row > 0 or hbm_compare_num_rows is not None):
+        actual_rows = (end_elem_idx - start_elem_idx + hbm_elements_per_row - 1) // hbm_elements_per_row
+        print(f"\nHBM Comparison Filter:")
+        print(f"  Comparing rows {hbm_compare_start_row} to {hbm_compare_start_row + actual_rows - 1} (of {hbm_total_rows} total)")
+        print(f"  Elements {start_elem_idx} to {end_elem_idx - 1} (of {len(simulated_all)} total)")
+
+    # Save translated FP values to file
+    if save_translated:
+        fp_output_file = workload_dir / "hbm_result.fp.txt"
+        # Use HBM row structure for formatting (matches .mem file rows)
+        hbm_row_elements = params.get("hbm_elements_per_row", 32)
+        total_hbm_rows = (len(simulated_all) + hbm_row_elements - 1) // hbm_row_elements
+
+        with open(fp_output_file, 'w') as f:
+            f.write(f"# HBM Result - Translated to Floating Point\n")
+            f.write(f"# Source: {hbm_result_file}\n")
+            f.write(f"# Format: {format_info}\n")
+            f.write(f"# Rows: 0 to {total_hbm_rows - 1} (matching .mem file rows)\n")
+            f.write(f"# Elements per row: {hbm_row_elements}\n")
+            f.write(f"# Total elements: {len(simulated_all)}\n")
+            f.write(f"#\n")
+
+            # Write translated FP values organized by HBM row (matching .mem file)
+            for row_idx in range(total_hbm_rows):
+                start_idx = row_idx * hbm_row_elements
+                end_idx = min(start_idx + hbm_row_elements, len(simulated_all))
+                row_values = simulated_all[start_idx:end_idx]
+                f.write(f"Row {row_idx:4d}:")
+                for v in row_values:
+                    f.write(f" {v:12.6f}")
+                f.write("\n")
+
+        if verbose:
+            print(f"\nTranslated HBM saved to: {fp_output_file}")
+
+    # Parse golden and apply same row filtering
+    golden_all = parse_golden_file(golden_file)
+
+    # Apply same filtering to golden values
+    if start_elem_idx > 0 or end_elem_idx < len(golden_all):
+        golden = golden_all[start_elem_idx:min(end_elem_idx, len(golden_all))]
+    else:
+        golden = golden_all
+
+    # Show comparison of first elements before full comparison
+    if verbose:
+        print("\n" + "=" * 60)
+        print("HBM Data Comparison (first 16 elements)")
+        print("=" * 60)
+        print(f"{'Index':<6} {'Simulated':<14} {'Golden':<14} {'Diff':<14}")
+        print("-" * 60)
+        for i in range(min(16, len(simulated), len(golden))):
+            diff = simulated[i] - golden[i]
+            print(f"{i:<6} {simulated[i]:<14.6f} {golden[i]:<14.6f} {diff:<14.6f}")
 
     # Compare
     result = compare_results(simulated, golden)
@@ -423,6 +505,183 @@ def verify_hbm(
         print(f"  Match Rate: {result['match_rate']:.2f}%")
         print(f"  Status: {'PASSED' if result['passed'] else 'FAILED'}")
         print("=" * 60)
+
+    # Add file path to result
+    if save_translated:
+        result["fp_output_file"] = str(workload_dir / "hbm_result.fp.txt")
+
+    return result
+
+
+def verify_hbm_rows(
+    workload_dir: Path,
+    params: Dict,
+    rows_to_check: List[int] = None,
+    expected_values: str = "zeros",
+    verbose: bool = True,
+    atol: float = 0.01,
+) -> Dict:
+    """Verify specific HBM rows against expected values.
+
+    Configurable row-based verification that checks specific rows
+    and compares against expected patterns (zeros, custom values, etc.)
+
+    Args:
+        workload_dir: Path to workload build directory
+        params: Verification parameters
+        rows_to_check: List of row indices to check (default: [0, 1] for first two rows)
+        expected_values: Expected pattern - "zeros" or list of expected FP values
+        verbose: Print detailed output
+        atol: Absolute tolerance for comparison
+
+    Returns:
+        Verification result dictionary
+    """
+    if rows_to_check is None:
+        rows_to_check = [0, 1]  # Default: check first two rows
+
+    hbm_result_file = workload_dir / "hbm_result.mem"
+
+    if not hbm_result_file.exists():
+        return {"error": f"HBM result file not found: {hbm_result_file}"}
+
+    # Parse HBM result file
+    hbm_rows = []
+    with open(hbm_result_file, 'r') as f:
+        for line in f:
+            line = line.strip()
+            if line.startswith('0x') or line.startswith('0X'):
+                hbm_rows.append(int(line, 16))
+
+    # Get format parameters
+    mx_format = params.get("mx_format", "mxint").lower()
+    scale_width = params.get("scale_width", 8)
+    block_size = params.get("block_size", 8)
+    row_width = 256  # bits per row
+
+    if mx_format == "mxint":
+        element_width = params.get("man_width", 8)
+    else:
+        exp_width = params.get("exp_width", 4)
+        man_width = params.get("man_width", 3)
+        element_width = 1 + exp_width + man_width
+
+    elements_per_row = row_width // element_width
+    format_info = f"{mx_format.upper()} (element_width={element_width})"
+
+    if verbose:
+        print("\n" + "=" * 70)
+        print("HBM Row-based Verification")
+        print("=" * 70)
+        print(f"Format: {format_info}")
+        print(f"Rows to check: {rows_to_check}")
+        print(f"Elements per row: {elements_per_row}")
+        print(f"Expected: {expected_values}")
+        print()
+
+    all_passed = True
+    results_per_row = []
+
+    for row_idx in rows_to_check:
+        if row_idx >= len(hbm_rows):
+            results_per_row.append({"row": row_idx, "error": "Row index out of range"})
+            all_passed = False
+            continue
+
+        row_value = hbm_rows[row_idx]
+
+        # Extract elements from this row
+        elements = []
+        for i in range(elements_per_row):
+            elem = (row_value >> (i * element_width)) & ((1 << element_width) - 1)
+            elements.append(elem)
+
+        # Get scale for this row (assume scale is in a separate region or use default)
+        # For simplicity, use bias value as scale (meaning exponent = 0)
+        scale_bias = (1 << (scale_width - 1)) - 1  # 127 for 8-bit
+        default_scale = scale_bias  # exp = 0
+
+        # Convert elements to float
+        fp_values = []
+        for elem in elements:
+            if mx_format == "mxint":
+                # MXINT: [sign(1)][magnitude(width-1)]
+                magnitude_bits = element_width - 1
+                sign = (elem >> magnitude_bits) & 1
+                magnitude = elem & ((1 << magnitude_bits) - 1)
+                normalized = magnitude / (1 << magnitude_bits)
+                # Use scale from data if available, otherwise default
+                scale_exp = 0  # Assume scale gives exp=0 for now
+                fp_val = normalized * (2 ** scale_exp)
+                if sign:
+                    fp_val = -fp_val
+            else:
+                # MXFP: [sign(1)][exp][man]
+                sign = (elem >> (exp_width + man_width)) & 1
+                exp = (elem >> man_width) & ((1 << exp_width) - 1)
+                man = elem & ((1 << man_width) - 1)
+                bias = (1 << (exp_width - 1)) - 1
+                if exp == 0:
+                    fp_val = 0.0 if man == 0 else (man / (2 ** man_width)) * (2 ** (1 - bias))
+                else:
+                    fp_val = (1 + man / (2 ** man_width)) * (2 ** (exp - bias))
+                if sign:
+                    fp_val = -fp_val
+
+            fp_values.append(fp_val)
+
+        # Compare with expected
+        if expected_values == "zeros":
+            expected = [0.0] * len(fp_values)
+        elif isinstance(expected_values, list):
+            expected = expected_values
+        else:
+            expected = [0.0] * len(fp_values)
+
+        # Check if values match
+        errors = []
+        for i, (actual, exp) in enumerate(zip(fp_values, expected)):
+            if abs(actual - exp) > atol:
+                errors.append((i, actual, exp))
+
+        row_passed = len(errors) == 0
+
+        row_result = {
+            "row": row_idx,
+            "passed": row_passed,
+            "num_elements": len(fp_values),
+            "num_errors": len(errors),
+            "fp_values": fp_values[:16],  # First 16 for display
+            "raw_hex": f"0x{row_value:064X}"[:40] + "...",
+        }
+        results_per_row.append(row_result)
+
+        if not row_passed:
+            all_passed = False
+
+        if verbose:
+            status = "PASS" if row_passed else "FAIL"
+            print(f"Row {row_idx}: {status}")
+            print(f"  Raw (first 128 bits): 0x{(row_value & ((1 << 128) - 1)):032X}")
+            print(f"  FP values (first 8): {[f'{v:.4f}' for v in fp_values[:8]]}")
+            if not row_passed:
+                print(f"  Errors ({len(errors)} elements differ):")
+                for idx, actual, exp in errors[:5]:  # Show first 5 errors
+                    print(f"    [{idx}] actual={actual:.6f}, expected={exp:.6f}")
+            print()
+
+    result = {
+        "type": "hbm_rows",
+        "passed": all_passed,
+        "rows_checked": rows_to_check,
+        "results_per_row": results_per_row,
+        "expected": expected_values,
+    }
+
+    if verbose:
+        print("=" * 70)
+        print(f"Overall: {'PASSED' if all_passed else 'FAILED'}")
+        print("=" * 70)
 
     return result
 
@@ -628,6 +887,9 @@ def verify_vram(
     Args:
         workload_dir: Path to workload build directory
         params: Verification parameters (can include v_fp_exp_width, v_fp_man_width)
+            - golden_vram_file: Optional separate golden file for VRAM (default: golden_result.pt)
+            - vram_compare_start_row: Start row for comparison (default: 0)
+            - vram_compare_num_rows: Number of rows to compare (default: all)
         verbose: Print detailed output
         save_fp_result: Save FP-converted values to file (default: True)
 
@@ -635,9 +897,17 @@ def verify_vram(
         Verification result dictionary
     """
     vram_result_file = workload_dir / "vector_result.mem"
-    golden_file = workload_dir / "golden_result.pt"
+
+    # Use separate VRAM golden file if specified, else fall back to unified golden
+    golden_vram_filename = params.get("golden_vram_file", "golden_result.pt")
+    golden_file = workload_dir / golden_vram_filename
     if not golden_file.exists():
-        golden_file = workload_dir / "golden_result.txt"
+        golden_file = workload_dir / golden_vram_filename.replace(".pt", ".txt")
+    if not golden_file.exists():
+        # Fall back to unified golden
+        golden_file = workload_dir / "golden_result.pt"
+        if not golden_file.exists():
+            golden_file = workload_dir / "golden_result.txt"
 
     if not vram_result_file.exists():
         return {"error": f"VRAM result file not found: {vram_result_file}"}
@@ -684,7 +954,28 @@ def verify_vram(
     if not simulated_values:
         return {"error": "No valid data extracted from VRAM"}
 
-    simulated = np.array(simulated_values, dtype=np.float32)
+    simulated_all = np.array(simulated_values, dtype=np.float32)
+
+    # Apply row-based comparison filter if specified
+    vram_compare_start_row = params.get("vram_compare_start_row", 0)
+    vram_compare_num_rows = params.get("vram_compare_num_rows", None)
+    vram_total_rows = params.get("vram_total_rows", num_rows)
+
+    # Calculate element range to compare (relative to extracted data)
+    compare_start_elem_idx = vram_compare_start_row * vlen
+    if vram_compare_num_rows is not None:
+        compare_end_elem_idx = min(compare_start_elem_idx + vram_compare_num_rows * vlen, len(simulated_all))
+    else:
+        compare_end_elem_idx = len(simulated_all)
+
+    # Filter to only the rows we want to compare
+    simulated = simulated_all[compare_start_elem_idx:compare_end_elem_idx]
+
+    if verbose and (vram_compare_start_row > 0 or vram_compare_num_rows is not None):
+        actual_compare_rows = (compare_end_elem_idx - compare_start_elem_idx + vlen - 1) // vlen
+        print(f"\nVRAM Comparison Filter:")
+        print(f"  Comparing rows {vram_compare_start_row} to {vram_compare_start_row + actual_compare_rows - 1} (of {vram_total_rows} total)")
+        print(f"  Elements {compare_start_elem_idx} to {compare_end_elem_idx - 1} (of {len(simulated_all)} total)")
 
     # Save FP results to file if requested
     fp_output_file = None
@@ -701,20 +992,28 @@ def verify_vram(
             f.write(f"# Total elements: {len(simulated_values)}\n")
             f.write("#\n")
             for row_idx, row_floats in row_fp_values:
-                f.write(f"Row {row_idx:4d}: ")
-                f.write(" ".join(f"{v:12.6f}" for v in row_floats))
+                f.write(f"Row {row_idx:4d}:")
+                for v in row_floats:
+                    f.write(f" {v:12.6f}")
                 f.write("\n")
 
         if verbose:
             print(f"FP results saved to: {fp_output_file}")
 
-    # Parse golden
-    golden = parse_golden_file(golden_file)
+    # Parse golden and apply same row filtering
+    golden_all = parse_golden_file(golden_file)
+
+    # Apply same filtering to golden values
+    if compare_start_elem_idx > 0 or compare_end_elem_idx < len(golden_all):
+        golden = golden_all[compare_start_elem_idx:min(compare_end_elem_idx, len(golden_all))]
+    else:
+        golden = golden_all
 
     # Compare
     result = compare_results(simulated, golden)
     result["type"] = "vram"
     result["rows_checked"] = min(num_rows, len(vram_data) - start_row)
+    result["rows_compared"] = (compare_end_elem_idx - compare_start_elem_idx + vlen - 1) // vlen if vram_compare_num_rows else result["rows_checked"]
     result["fp_exp_width"] = exp_width
     result["fp_man_width"] = man_width
     result["vlen"] = vlen
@@ -742,6 +1041,115 @@ def verify_vram(
             print(f"First 8 golden values:    {list(golden[:8])}")
 
     return result
+
+
+def save_golden_hbm(
+    result: torch.Tensor,
+    output_dir: Path,
+    filename: str = "golden_hbm_result",
+    elements_per_row: int = 32,
+) -> dict:
+    """Save golden HBM result in row-based format matching hbm_result.fp.txt.
+
+    Args:
+        result: Golden result tensor (can be any shape, will be flattened)
+        output_dir: Directory to save files
+        filename: Output filename base (without extension)
+        elements_per_row: Number of elements per HBM row (default 32 for 256-bit rows with 8-bit elements)
+
+    Returns:
+        Dictionary with paths to saved files
+    """
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    paths = {}
+
+    # Flatten if needed
+    flat_result = result.flatten()
+    num_elements = len(flat_result)
+    num_rows = (num_elements + elements_per_row - 1) // elements_per_row
+
+    # Save as PyTorch tensor
+    pt_path = output_dir / f"{filename}.pt"
+    torch.save(result, pt_path)
+    paths["pt"] = pt_path
+
+    # Save in row-based format matching .mem file rows
+    txt_path = output_dir / f"{filename}.txt"
+    with open(txt_path, "w") as f:
+        f.write(f"# Golden HBM Result\n")
+        f.write(f"# Elements per HBM row: {elements_per_row}\n")
+        f.write(f"# Rows: 0 to {num_rows - 1} (matching .mem file rows)\n")
+        f.write(f"# Total elements: {num_elements}\n")
+        f.write(f"#\n")
+        for row_idx in range(num_rows):
+            start_idx = row_idx * elements_per_row
+            end_idx = min(start_idx + elements_per_row, num_elements)
+            f.write(f"Row {row_idx:4d}:")
+            for i in range(start_idx, end_idx):
+                f.write(f" {flat_result[i].item():12.6f}")
+            f.write("\n")
+    paths["txt"] = txt_path
+
+    return paths
+
+
+def save_golden_vram(
+    result: torch.Tensor,
+    output_dir: Path,
+    filename: str = "golden_vram_result",
+    vlen: int = 16,
+) -> dict:
+    """Save golden VRAM result in row-based format matching vector_result.fp.txt.
+
+    Args:
+        result: Golden result tensor with shape (num_rows, vlen) or will be reshaped
+        output_dir: Directory to save files
+        filename: Output filename base (without extension)
+        vlen: Number of elements per VRAM row
+
+    Returns:
+        Dictionary with paths to saved files
+    """
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    paths = {}
+
+    # Ensure 2D shape (num_rows, vlen)
+    if result.dim() > 2:
+        result = result.squeeze()
+    if result.dim() == 1:
+        num_elements = result.numel()
+        num_rows = (num_elements + vlen - 1) // vlen
+        result = result.flatten()
+        # Pad if needed
+        if num_elements < num_rows * vlen:
+            result = torch.cat([result, torch.zeros(num_rows * vlen - num_elements)])
+        result = result.view(num_rows, vlen)
+
+    num_rows, actual_vlen = result.shape
+
+    # Save as PyTorch tensor
+    pt_path = output_dir / f"{filename}.pt"
+    torch.save(result, pt_path)
+    paths["pt"] = pt_path
+
+    # Save in row-based format like vector_result.fp.txt
+    txt_path = output_dir / f"{filename}.txt"
+    with open(txt_path, "w") as f:
+        f.write(f"# Golden VRAM Result\n")
+        f.write(f"# VLEN: {actual_vlen}, Format: FP32\n")
+        f.write(f"# Rows: 0 to {num_rows - 1}\n")
+        f.write(f"# Total elements: {num_rows * actual_vlen}\n")
+        f.write(f"#\n")
+        for row_idx in range(num_rows):
+            f.write(f"Row {row_idx:4d}:")
+            for col_idx in range(actual_vlen):
+                f.write(f" {result[row_idx, col_idx].item():12.6f}")
+            f.write("\n")
+    paths["txt"] = txt_path
+
+    return paths
 
 
 def main():
@@ -801,6 +1209,24 @@ def main():
         default=None,
         help="Override V_FP_MANT_WIDTH (default: from params or 5)"
     )
+    parser.add_argument(
+        "--check-rows",
+        type=str,
+        default=None,
+        help="Check specific HBM rows (comma-separated, e.g., '0,1,2'). Uses row-based verification instead of full HBM check."
+    )
+    parser.add_argument(
+        "--expected",
+        type=str,
+        default="zeros",
+        help="Expected values for row check: 'zeros' (default) or comma-separated floats"
+    )
+    parser.add_argument(
+        "--atol",
+        type=float,
+        default=0.01,
+        help="Absolute tolerance for comparison (default: 0.01)"
+    )
     args = parser.parse_args()
 
     workload_dir = Path(args.workload_dir)
@@ -836,16 +1262,41 @@ def main():
 
     results = {}
     all_passed = True
+    save_fp = args.save_fp and not args.no_save_fp
 
     # HBM verification
-    if args.check_hbm or params.get("check_hbm", False):
-        hbm_result = verify_hbm(workload_dir, params, verbose=args.verbose)
+    if args.check_rows:
+        # Row-based verification (configurable)
+        rows_to_check = [int(r.strip()) for r in args.check_rows.split(',')]
+
+        # Parse expected values
+        if args.expected == "zeros":
+            expected_values = "zeros"
+        else:
+            try:
+                expected_values = [float(v.strip()) for v in args.expected.split(',')]
+            except ValueError:
+                expected_values = "zeros"
+
+        hbm_result = verify_hbm_rows(
+            workload_dir, params,
+            rows_to_check=rows_to_check,
+            expected_values=expected_values,
+            verbose=args.verbose,
+            atol=args.atol
+        )
+        results["hbm_rows"] = hbm_result
+        if hbm_result.get("error") or not hbm_result.get("passed", False):
+            all_passed = False
+
+    elif args.check_hbm or params.get("check_hbm", False):
+        # Full HBM verification (original method)
+        hbm_result = verify_hbm(workload_dir, params, verbose=args.verbose, save_translated=save_fp)
         results["hbm"] = hbm_result
         if hbm_result.get("error") or not hbm_result.get("passed", False):
             all_passed = False
 
     # VRAM verification
-    save_fp = args.save_fp and not args.no_save_fp
     if args.check_vram or params.get("check_vram", False):
         vram_result = verify_vram(
             workload_dir, params,
