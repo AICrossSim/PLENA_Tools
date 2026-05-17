@@ -1,11 +1,10 @@
 from .build_sys_tools import *
 import logging
-from cfl_tools.logger import get_logger
 from plena_utils import Random_MXFP_Tensor_Generator, Random_MXINT_Tensor_Generator
 from pathlib import Path
 import torch
 
-logger = get_logger("testbench")
+logger = logging.getLogger("testbench")
 logger.setLevel(logging.DEBUG)
 
 
