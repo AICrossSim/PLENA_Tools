@@ -278,8 +278,9 @@ def compare_vram_with_golden(
     print(f"use_stride_mode: {use_stride_mode}")
     print(f"num_batches: {num_batches}")
     print(f"elements_per_batch: {elements_per_batch}")
+    print(f"row_dim (stride): {row_dim}")
     if use_stride_mode:
-        simulated_np = reorder_stride_mode(simulated_np, num_batches, elements_per_batch)
+        simulated_np = reorder_stride_mode(simulated_np, num_batches, elements_per_batch, stride=row_dim)
 
     simulated_values = torch.from_numpy(simulated_np).bfloat16()
 

@@ -72,6 +72,7 @@ def create_mem_for_sim(
     build_path=None,
     hbm_row_width: int = 256,
     mx_format: str = None,
+    instr_storage_offset: int = None,
 ):
     """
     Create memory files for simulation.
@@ -93,6 +94,9 @@ def create_mem_for_sim(
         build_path: Path to build directory
         hbm_row_width: HBM row width in bits
         mx_format: Force format to use ("mxfp" or "mxint"). If None, uses mxint_enable flag.
+        instr_storage_offset: Byte offset for instruction storage. If None, uses default
+            from build_sys_tools (8192). Pass "auto" or -1 to automatically calculate
+            offset to place instructions right after data.
     """
     if mode == "behave_sim":
         if build_path is not None:
@@ -178,4 +182,4 @@ def create_mem_for_sim(
             int_data = torch.load(pt_file)
             memory_data_manager.add_int_file(pt_file.name, int_data)
 
-    env_setup(memory_data_manager, asm_file.parent, data_config, quant_config, hbm_row_width=hbm_row_width)
+    env_setup(memory_data_manager, asm_file.parent, data_config, quant_config, hbm_row_width=hbm_row_width, instr_storage_offset=instr_storage_offset)
