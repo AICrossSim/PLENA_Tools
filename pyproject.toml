@@ -8,6 +8,7 @@ dependencies = [
     "torch>=2.0.0",
     "cocotb>=1.8.0",
     "bitstring>=4.0.0",
+    "toml>=0.10.0",
 ]
 
 [project.optional-dependencies]
