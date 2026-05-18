@@ -33,6 +33,9 @@ from .load_config import (
 from .load_config import (
     get_quant_config_for_format as get_quant_config_for_format,
 )
+from .load_config import (
+    load_precision_from_toml as load_precision_from_toml,
+)
 from .logger import get_logger as get_logger
 from .logger import set_logging_verbosity as set_logging_verbosity
 

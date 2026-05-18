@@ -57,6 +57,49 @@ def load_toml_config(file_path, section_to_load=None, mode="BEHAVIOR"):
     return mode_section.get(section_to_load, {})
 
 
+def load_precision_from_toml(toml_path, mode="TRANSACTIONAL", data_type="act"):
+    """
+    Load precision settings from plena_settings.toml.
+
+    Args:
+        toml_path: Path to plena_settings.toml
+        mode: "TRANSACTIONAL" or "ANALYTIC"
+        data_type: Type of data to load precision for ("act", "kv", or "wt")
+
+    Returns:
+        dict: precision_settings with block_size, exp_width, man_width,
+              scale_exp_width, int_width
+    """
+    from pathlib import Path
+
+    with open(toml_path) as f:
+        config = toml.load(f)
+
+    mode_config = config.get(mode, {})
+    precision_config = mode_config.get("PRECISION", {})
+
+    # Map data_type to HBM type key
+    type_map = {
+        "act": "HBM_V_ACT_TYPE",
+        "kv": "HBM_V_KV_TYPE",
+        "wt": "HBM_M_WEIGHT_TYPE",
+    }
+    hbm_key = type_map.get(data_type.lower(), "HBM_M_WEIGHT_TYPE")
+    hbm_type = precision_config.get(hbm_key, {})
+    int_type = precision_config.get("HBM_V_INT_TYPE", {}).get("DATA_TYPE", {})
+
+    elem = hbm_type.get("ELEM", {})
+    scale = hbm_type.get("SCALE", {})
+
+    return {
+        "block_size": hbm_type.get("block", 8),
+        "exp_width": elem.get("exponent", 4),
+        "man_width": elem.get("mantissa", 3),
+        "scale_exp_width": scale.get("exponent", 8),
+        "int_width": int_type.get("width", 32),
+    }
+
+
 def load_precision_from_svh(definitions_path, data_type="act"):
     """
     Load precision settings from hardware SVH files.
