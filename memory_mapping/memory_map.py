@@ -202,15 +202,28 @@ def _generate_hbm_mem(
 
 
 def _build_blocks_bytes(blocks, element_width, bytes_per_row):
-    """Build byte array from element blocks."""
+    """Build byte array from element blocks.
+
+    Matches the byte layout of _write_blocks_to_file for little-endian memory:
+    - _write_blocks_to_file PREPENDS blocks: final hex = H3 + H2 + H1 + H0
+    - In .mem, block0 is at the RIGHT (low address in LE)
+    - For LE memory: blocks stay in order 0,1,2,3, but each block's bytes reverse
+
+    Within each block:
+    - _map_block_to_hex puts element[0] at the rightmost position (LSB)
+    - _hex_to_bytes reads left-to-right, producing [MSB,...,LSB]
+    - For LE, we reverse each block so element[0] is at lowest address
+    """
     data = bytearray()
     row_buffer = bytearray()
     for block in blocks:
         hex_str = _map_block_to_hex(block, element_width)
         block_bytes = _hex_to_bytes(hex_str)
-        row_buffer.extend(block_bytes)
+        # Reverse each block for little-endian: element[0] at lowest address
+        row_buffer.extend(block_bytes[::-1])
         if len(row_buffer) >= bytes_per_row:
-            data.extend(row_buffer[:bytes_per_row])
+            row_bytes = row_buffer[:bytes_per_row]
+            data.extend(row_bytes)
             row_buffer = row_buffer[bytes_per_row:]
     if row_buffer:
         padding = bytes_per_row - len(row_buffer)
@@ -220,15 +233,25 @@ def _build_blocks_bytes(blocks, element_width, bytes_per_row):
 
 
 def _build_scales_bytes(bias, bias_width, bytes_per_row):
-    """Build byte array from scale values."""
+    """Build byte array from scale values.
+
+    Matches the byte layout of _write_scales_to_file for little-endian memory:
+    - _write_scales_to_file PREPENDS scales: final hex = S_n + ... + S_1 + S_0
+    - In .mem, scale[0] is at the RIGHT (low address in LE)
+    - For LE memory: scales stay in order, but each scale's bytes reverse
+
+    For 8-bit scales, there's only 1 byte, so reversal is identity.
+    """
     data = bytearray()
     row_buffer = bytearray()
     for b in bias:
         hex_str = _map_scale_to_hex(b, bias_width)
         bias_bytes = _hex_to_bytes(hex_str)
-        row_buffer.extend(bias_bytes)
+        # Reverse each scale for little-endian (no-op for 8-bit scales)
+        row_buffer.extend(bias_bytes[::-1])
         if len(row_buffer) >= bytes_per_row:
-            data.extend(row_buffer[:bytes_per_row])
+            row_bytes = row_buffer[:bytes_per_row]
+            data.extend(row_bytes)
             row_buffer = row_buffer[bytes_per_row:]
     if row_buffer:
         padding = bytes_per_row - len(row_buffer)
