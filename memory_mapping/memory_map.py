@@ -259,7 +259,7 @@ def _generate_hbm_bin(
     """
     directory = Path(directory)
     directory.mkdir(parents=True, exist_ok=True)
-    output_file = directory / "hbm.bin"
+    output_file = directory / "hbm_for_behave_sim.bin"
 
     bytes_per_row = hbm_row_width // 8
 

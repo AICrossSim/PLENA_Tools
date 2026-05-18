@@ -173,6 +173,18 @@ def env_setup(memory_data_manager, build_path: str, data_config, quant_config, h
         tensor_data=tensor_data,
     )
 
+    # Also generate hbm_for_behave_sim.bin for the Rust transactional emulator
+    generate_hbm(
+        blocks=None,
+        bias=None,
+        element_width=element_width,
+        bias_width=bias_width,
+        directory=build_path,
+        hbm_row_width=hbm_row_width,
+        mode="sim",
+        tensor_data=tensor_data,
+    )
+
 
 def init_mem(build_path):
     """Initialize memory files and environment variables for simulation."""
