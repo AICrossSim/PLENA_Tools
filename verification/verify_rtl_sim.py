@@ -375,48 +375,75 @@ def verify_hbm(
     block_size = params.get("block_size", 8)
     scale_offset = params.get("scale_offset")
 
-    # Determine format: MXINT or MXFP
+    # Determine format: MXINT, MXFP, or raw FP
     mx_format = params.get("mx_format", "mxfp").lower()
 
-    if mx_format == "mxint":
-        int_width = params.get("man_width", 8)  # For MXINT, man_width is the int_width
+    if mx_format == "raw_fp":
+        # Raw IEEE-like FP: sign + exp + mantissa, no shared scales.
+        # Elements are packed directly into the HBM row, LSB first.
+        exp_width = params.get("exp_width", 6)
+        man_width = params.get("man_width", 5)
+        fp_width = 1 + exp_width + man_width
+        elements_per_row = params.get("hbm_elements_per_row", 32)
+        num_hbm_rows = params.get("hbm_total_rows", len(hbm_data))
+
+        # Unpack raw FP elements from HBM rows
+        from plena_quant.mxfp.utils import bin_2_fp
+        simulated_all = []
+        _bytes_per_row = 32  # 256-bit HBM row = 32 bytes
+        start_row = start_addr // _bytes_per_row
+        for row_idx in range(start_row, start_row + num_hbm_rows):
+            row_val = hbm_data.get(row_idx, 0)
+            for elem_idx in range(elements_per_row):
+                bit_offset = elem_idx * fp_width
+                elem_bits = (row_val >> bit_offset) & ((1 << fp_width) - 1)
+                fp_val = bin_2_fp(elem_bits, exp_width, man_width)
+                simulated_all.append(fp_val)
+        simulated_all = np.array(simulated_all, dtype=np.float64)
+        format_info = f"Raw FP (exp={exp_width}, man={man_width})"
+        # Skip MXFP element/scale extraction below
+        elements, scales = None, None
+
+    elif mx_format == "mxint":
+        int_width = params.get("man_width", 8)
         mx_element_width = int_width
     else:
         exp_width = params.get("exp_width", 4)
         man_width = params.get("man_width", 3)
         mx_element_width = 1 + exp_width + man_width  # sign + exp + man
 
-    # Extract elements and scales
-    elements, scales = read_hbm_elements_and_scales(
-        hbm_data,
-        start_addr=start_addr,
-        num_elements=num_elements,
-        mx_element_width=mx_element_width,
-        mx_scale_width=scale_width,
-        block_size=block_size,
-        scale_offset=scale_offset,
-    )
+    if mx_format != "raw_fp":
+        # Extract elements and scales (MXFP/MXINT only)
+        elements, scales = read_hbm_elements_and_scales(
+            hbm_data,
+            start_addr=start_addr,
+            num_elements=num_elements,
+            mx_element_width=mx_element_width,
+            mx_scale_width=scale_width,
+            block_size=block_size,
+            scale_offset=scale_offset,
+        )
 
-    # Convert to float based on format
-    if mx_format == "mxint":
-        simulated_all = mxint_to_float(
-            elements,
-            scales,
-            int_width=int_width,
-            scale_width=scale_width,
-            block_size=block_size,
-        )
-        format_info = f"MXINT (int_width={int_width}, scale_width={scale_width})"
-    else:
-        simulated_all = mx_to_float(
-            elements,
-            scales,
-            exp_width=exp_width,
-            man_width=man_width,
-            scale_width=scale_width,
-            block_size=block_size,
-        )
-        format_info = f"MXFP (exp={exp_width}, man={man_width}, scale={scale_width})"
+        # Convert to float based on format
+        if mx_format == "mxint":
+            simulated_all = mxint_to_float(
+                elements,
+                scales,
+                int_width=int_width,
+                scale_width=scale_width,
+                block_size=block_size,
+            )
+            format_info = f"MXINT (int_width={int_width}, scale_width={scale_width})"
+        else:
+            simulated_all = mx_to_float(
+                elements,
+                scales,
+                exp_width=exp_width,
+                man_width=man_width,
+                scale_width=scale_width,
+                block_size=block_size,
+            )
+            format_info = f"MXFP (exp={exp_width}, man={man_width}, scale={scale_width})"
 
     # Apply row-based comparison filter if specified
     hbm_elements_per_row = params.get("hbm_elements_per_row", 32)  # Default: 32 elements per 256-bit row

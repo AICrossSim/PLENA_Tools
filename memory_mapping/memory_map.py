@@ -314,3 +314,31 @@ def _generate_hbm_bin(
             f.write(scale_data)
 
     return output_file
+
+
+# Compatibility wrapper for older RTL tests (SimTop_correctness_tb)
+def map_data_to_fake_hbm_for_rtl_sim(
+    blocks, element_width, block_width, bias, bias_width,
+    directory, combined_blk_dim, append=True, hbm_row_width=64,
+):
+    """Write split element/scale HBM mem files for the split fake HBM.
+    Preserved for backward compatibility with older test infrastructure.
+    For new code, use generate_hbm() instead.
+    """
+    from pathlib import Path
+    directory = Path(directory)
+    directory.mkdir(parents=True, exist_ok=True)
+
+    hbm_ele_path = directory / "hbm_ele.mem"
+    hbm_scale_path = directory / "hbm_scale.mem"
+    mode = "a" if append else "w"
+
+    num_blocks_per_row = max(1, hbm_row_width // block_width)
+    num_bias_per_row = max(1, hbm_row_width // bias_width)
+
+    with open(hbm_ele_path, mode) as f:
+        _write_blocks_to_file(f, blocks, element_width, hbm_row_width)
+
+    with open(hbm_scale_path, mode) as f:
+        _write_scales_to_file(f, bias, bias_width, hbm_row_width)
+
