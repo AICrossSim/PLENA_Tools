@@ -10,7 +10,7 @@ def _minifloat_denorm_quantize(
     x: Tensor,
     width: int,
     exponent_width: int,
-    exponent_bias: int = None,
+    exponent_bias: int | None = None,
 ):
     """
     - Converts IEEE FP32/64 to minifloat without the implicit leading bit in mantissas.
@@ -77,7 +77,7 @@ class MinifloatDenormQuantize(torch.autograd.Function):
         x: Tensor,
         width: int,
         exponent_width: int,
-        exponent_bias: int = None,
+        exponent_bias: int | None = None,
     ):
         return _minifloat_denorm_quantize(
             x, width=width, exponent_width=exponent_width, exponent_bias=exponent_bias
@@ -93,7 +93,7 @@ def minifloat_denorm_quantizer(
     x: Tensor,
     width: int,
     exponent_width: int,
-    exponent_bias: int = None,
+    exponent_bias: int | None = None,
 ):
     """
     - Converts IEEE FP32/64 to minifloat without the implicit leading bit in mantissas.
@@ -120,7 +120,7 @@ def minifloat_denorm_quantizer(
 
 
 def _minifloat_ieee_quantize(
-    x: Tensor, width: int, exponent_width: int, exponent_bias: int = None
+    x: Tensor, width: int, exponent_width: int, exponent_bias: int | None = None
 ):
     """
     - Converts IEEE FP32/64 to minifloat with the implicit leading bit in mantissas.
@@ -187,7 +187,7 @@ def _minifloat_ieee_quantize(
 class MinifloatIEEEQuantize(torch.autograd.Function):
     @staticmethod
     def forward(
-        ctx, x: Tensor, width: int, exponent_width: int, exponent_bias: int = None
+        ctx, x: Tensor, width: int, exponent_width: int, exponent_bias: int | None = None
     ):
         return _minifloat_ieee_quantize(
             x, width=width, exponent_width=exponent_width, exponent_bias=exponent_bias
@@ -200,7 +200,7 @@ class MinifloatIEEEQuantize(torch.autograd.Function):
 
 
 def minifloat_ieee_quantizer(
-    x: Tensor, width: int, exponent_width: int, exponent_bias: int = None
+    x: Tensor, width: int, exponent_width: int, exponent_bias: int | None = None
 ):
     """
     - Converts IEEE FP32/64 to minifloat with the implicit leading bit in mantissas.

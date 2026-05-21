@@ -52,7 +52,7 @@ def mxint_to_float(element: int, scale: int, int_width: int = 8, scale_width: in
 
 def read_hbm_mxint(hbm_path: Path, num_elements: int, block_size: int = 8,
                    element_width: int = 8, scale_width: int = 8, row_width: int = 256,
-                   total_element_rows: int = None, scale_start_row: int = None):
+                   total_element_rows: int | None = None, scale_start_row: int | None = None):
     """Read MXINT data from hbm.mem and convert to float.
 
     Args:
@@ -74,7 +74,7 @@ def read_hbm_mxint(hbm_path: Path, num_elements: int, block_size: int = 8,
     element_rows = (num_blocks + blocks_per_row - 1) // blocks_per_row
     scale_rows = (num_blocks + scales_per_row - 1) // scales_per_row
 
-    with open(hbm_path, 'r') as f:
+    with open(hbm_path) as f:
         lines = [line.strip() for line in f if line.strip() and line.strip().startswith('0x')]
 
     # Auto-detect scale start row by finding where scale-like data begins
@@ -202,9 +202,9 @@ def main():
 
     build_dir = Path(sys.argv[1])
 
-    print(f"=" * 70)
-    print(f"MXINT Encoding Verification")
-    print(f"=" * 70)
+    print("=" * 70)
+    print("MXINT Encoding Verification")
+    print("=" * 70)
     print(f"Build dir: {build_dir}")
 
     try:
@@ -241,7 +241,7 @@ def main():
         print()
 
     # Compute error metrics
-    print(f"Error Metrics:")
+    print("Error Metrics:")
     print(f"  Max absolute error:  {results['max_abs_error']:.6f}")
     print(f"  Mean absolute error: {results['mean_abs_error']:.6f}")
     print(f"  Max relative error:  {results['max_rel_error']:.6f}")
@@ -260,7 +260,7 @@ def main():
 
     # Show worst cases
     worst_indices = np.argsort(abs_error)[-5:][::-1]
-    print(f"\nWorst 5 errors:")
+    print("\nWorst 5 errors:")
     print(f"  {'Index':<8} {'Original':<12} {'Decoded':<12} {'Abs Error':<12} {'Rel Error':<12}")
     for idx in worst_indices:
         print(f"  {idx:<8} {original_flat[idx]:<12.6f} {decoded[idx]:<12.6f} "

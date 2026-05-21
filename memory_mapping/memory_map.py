@@ -4,12 +4,10 @@ This module provides functions to convert quantized MXFP data into
 memory files compatible with RTL simulation (.mem) or behavioral simulation (.bin).
 """
 
-import os
 from pathlib import Path
-from typing import List, Union
 
 
-def _map_block_to_hex(block: List[int], element_width: int) -> str:
+def _map_block_to_hex(block: list[int], element_width: int) -> str:
     """Convert a block of elements to hex string.
 
     Elements are packed in little-endian order within the block:
@@ -42,16 +40,16 @@ def _hex_to_bytes(hex_str: str) -> bytes:
 
 
 def generate_hbm(
-    blocks: List[List[int]],
-    bias: List[int],
+    blocks: list[list[int]],
+    bias: list[int],
     element_width: int,
     bias_width: int,
-    directory: Union[str, Path],
+    directory: str | Path,
     hbm_row_width: int = 256,
     mode: str = "rtl",
-    instructions: List[int] = None,
+    instructions: list[int] | None = None,
     instr_storage_offset: int = 8192,
-    tensor_data: List[tuple] = None,
+    tensor_data: list[tuple] | None = None,
 ) -> Path:
     """Generate HBM memory file from quantized MXFP data.
 
@@ -132,15 +130,15 @@ def _write_scales_to_file(f, bias, bias_width, hbm_row_width):
 
 
 def _generate_hbm_mem(
-    blocks: List[List[int]],
-    bias: List[int],
+    blocks: list[list[int]],
+    bias: list[int],
     element_width: int,
     bias_width: int,
-    directory: Union[str, Path],
+    directory: str | Path,
     hbm_row_width: int,
-    instructions: List[int] = None,
+    instructions: list[int] | None = None,
     instr_storage_offset: int = 8192,
-    tensor_data: List[tuple] = None,
+    tensor_data: list[tuple] | None = None,
 ) -> Path:
     """Generate HBM .mem file (hex text format for RTL simulation).
 
@@ -261,13 +259,13 @@ def _build_scales_bytes(bias, bias_width, bytes_per_row):
 
 
 def _generate_hbm_bin(
-    blocks: List[List[int]],
-    bias: List[int],
+    blocks: list[list[int]],
+    bias: list[int],
     element_width: int,
     bias_width: int,
-    directory: Union[str, Path],
+    directory: str | Path,
     hbm_row_width: int,
-    tensor_data: List[tuple] = None,
+    tensor_data: list[tuple] | None = None,
 ) -> Path:
     """Generate HBM .bin file (binary format for behavioral simulation).
 

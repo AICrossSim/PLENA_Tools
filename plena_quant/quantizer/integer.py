@@ -10,7 +10,7 @@ from .utils import my_clamp, my_round, my_floor
 
 
 def _fixed_point_quantize(
-    x: Tensor | ndarray, width: int, frac_width: int = None, is_signed: bool = True
+    x: Tensor | ndarray, width: int, frac_width: int | None = None, is_signed: bool = True
 ):
     """
     - Do linear quantization to input according to a scale and number of bits
@@ -49,7 +49,7 @@ def _fixed_point_quantize(
 
 
 def _fixed_point_floor_quantize(
-    x: Tensor | ndarray, width: int, frac_width: int = None, is_signed: bool = True
+    x: Tensor | ndarray, width: int, frac_width: int | None = None, is_signed: bool = True
 ):
     """
     - Do linear quantization to input according to a scale and number of bits
@@ -88,7 +88,7 @@ def _fixed_point_floor_quantize(
 
 
 def _integer_floor_quantize(
-    x: Tensor, width: int, frac_width: int = None, is_signed: bool = True
+    x: Tensor, width: int, frac_width: int | None = None, is_signed: bool = True
 ):
     if frac_width is None:
         frac_width = width // 2

@@ -17,13 +17,12 @@ import json
 import re
 import sys
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 import torch
 
 
-def parse_hbm_result_file(filepath: Path) -> Dict[int, int]:
+def parse_hbm_result_file(filepath: Path) -> dict[int, int]:
     """Parse HBM result file - simple sequential format.
 
     File format:
@@ -40,7 +39,7 @@ def parse_hbm_result_file(filepath: Path) -> Dict[int, int]:
     data = {}
     line_num = 0
 
-    with open(filepath, 'r') as f:
+    with open(filepath) as f:
         for line in f:
             line = line.strip()
             if not line or line.startswith("//"):
@@ -55,15 +54,15 @@ def parse_hbm_result_file(filepath: Path) -> Dict[int, int]:
 
 
 def read_hbm_elements_and_scales(
-    hbm_data: Dict[int, int],
+    hbm_data: dict[int, int],
     start_addr: int,
     num_elements: int,
     row_width: int = 256,  # HBM row width (256 bits)
     mx_element_width: int = 8,  # Width per MX element (8 bits for 4+3+1)
     mx_scale_width: int = 8,    # Width per MX scale (8 bits)
     block_size: int = 8,        # Elements per block
-    scale_offset: int = None,   # Byte offset from elements to scales
-) -> Tuple[np.ndarray, np.ndarray]:
+    scale_offset: int | None = None,   # Byte offset from elements to scales
+) -> tuple[np.ndarray, np.ndarray]:
     """Extract elements and scales from unified HBM data.
 
     Args:
@@ -80,7 +79,7 @@ def read_hbm_elements_and_scales(
         Tuple of (elements array, scales array)
     """
     bytes_per_row = row_width // 8  # 32 bytes per row
-    elements_per_row = row_width // mx_element_width
+    row_width // mx_element_width
 
     # Extract elements
     elements = []
@@ -137,8 +136,8 @@ def mx_to_float(
         Float array of converted values
     """
     values = []
-    sign_mask = 1 << (exp_width + man_width)
-    exp_mask = ((1 << exp_width) - 1) << man_width
+    1 << (exp_width + man_width)
+    ((1 << exp_width) - 1) << man_width
     man_mask = (1 << man_width) - 1
     bias = (1 << (exp_width - 1)) - 1 if exp_width > 0 else 0
     scale_bias = 127  # E8M0 scale bias
@@ -233,7 +232,7 @@ def compare_results(
     golden: np.ndarray,
     atol: float = 0.1,
     rtol: float = 0.1,
-) -> Dict:
+) -> dict:
     """Compare simulated results against golden reference.
 
     Args:
@@ -296,7 +295,7 @@ def parse_golden_file(filepath: Path) -> np.ndarray:
         return tensor.float().numpy().flatten()
 
     # Parse text file
-    with open(filepath, 'r') as f:
+    with open(filepath) as f:
         content = f.read()
 
     # Find "Original Output:" section
@@ -326,10 +325,10 @@ def parse_golden_file(filepath: Path) -> np.ndarray:
 
 def verify_hbm(
     workload_dir: Path,
-    params: Dict,
+    params: dict,
     verbose: bool = True,
     save_translated: bool = True,
-) -> Dict:
+) -> dict:
     """Verify HBM contents against golden result.
 
     Supports both MXFP and MXINT formats based on params["mx_format"].
@@ -435,7 +434,7 @@ def verify_hbm(
 
     if verbose and (hbm_compare_start_row > 0 or hbm_compare_num_rows is not None):
         actual_rows = (end_elem_idx - start_elem_idx + hbm_elements_per_row - 1) // hbm_elements_per_row
-        print(f"\nHBM Comparison Filter:")
+        print("\nHBM Comparison Filter:")
         print(f"  Comparing rows {hbm_compare_start_row} to {hbm_compare_start_row + actual_rows - 1} (of {hbm_total_rows} total)")
         print(f"  Elements {start_elem_idx} to {end_elem_idx - 1} (of {len(simulated_all)} total)")
 
@@ -447,13 +446,13 @@ def verify_hbm(
         total_hbm_rows = (len(simulated_all) + hbm_row_elements - 1) // hbm_row_elements
 
         with open(fp_output_file, 'w') as f:
-            f.write(f"# HBM Result - Translated to Floating Point\n")
+            f.write("# HBM Result - Translated to Floating Point\n")
             f.write(f"# Source: {hbm_result_file}\n")
             f.write(f"# Format: {format_info}\n")
             f.write(f"# Rows: 0 to {total_hbm_rows - 1} (matching .mem file rows)\n")
             f.write(f"# Elements per row: {hbm_row_elements}\n")
             f.write(f"# Total elements: {len(simulated_all)}\n")
-            f.write(f"#\n")
+            f.write("#\n")
 
             # Write translated FP values organized by HBM row (matching .mem file)
             for row_idx in range(total_hbm_rows):
@@ -515,12 +514,12 @@ def verify_hbm(
 
 def verify_hbm_rows(
     workload_dir: Path,
-    params: Dict,
-    rows_to_check: List[int] = None,
+    params: dict,
+    rows_to_check: list[int] | None = None,
     expected_values: str = "zeros",
     verbose: bool = True,
     atol: float = 0.01,
-) -> Dict:
+) -> dict:
     """Verify specific HBM rows against expected values.
 
     Configurable row-based verification that checks specific rows
@@ -547,7 +546,7 @@ def verify_hbm_rows(
 
     # Parse HBM result file
     hbm_rows = []
-    with open(hbm_result_file, 'r') as f:
+    with open(hbm_result_file) as f:
         for line in f:
             line = line.strip()
             if line.startswith('0x') or line.startswith('0X'):
@@ -556,7 +555,7 @@ def verify_hbm_rows(
     # Get format parameters
     mx_format = params.get("mx_format", "mxint").lower()
     scale_width = params.get("scale_width", 8)
-    block_size = params.get("block_size", 8)
+    params.get("block_size", 8)
     row_width = 256  # bits per row
 
     if mx_format == "mxint":
@@ -598,8 +597,7 @@ def verify_hbm_rows(
 
         # Get scale for this row (assume scale is in a separate region or use default)
         # For simplicity, use bias value as scale (meaning exponent = 0)
-        scale_bias = (1 << (scale_width - 1)) - 1  # 127 for 8-bit
-        default_scale = scale_bias  # exp = 0
+        (1 << (scale_width - 1)) - 1  # 127 for 8-bit
 
         # Convert elements to float
         fp_values = []
@@ -686,7 +684,7 @@ def verify_hbm_rows(
     return result
 
 
-def parse_vector_result_file(filepath: Path, row_width_bits: int = 192) -> List[int]:
+def parse_vector_result_file(filepath: Path, row_width_bits: int = 192) -> list[int]:
     """Parse vector SRAM result file.
 
     File format (hex values, one per line):
@@ -703,7 +701,7 @@ def parse_vector_result_file(filepath: Path, row_width_bits: int = 192) -> List[
     """
     data = []
 
-    with open(filepath, 'r') as f:
+    with open(filepath) as f:
         for line in f:
             line = line.strip()
             if not line or line.startswith("//"):
@@ -770,7 +768,7 @@ def extract_fp_elements_from_row(
     num_elements: int = 16,
     exp_width: int = 6,
     man_width: int = 5,
-) -> List[float]:
+) -> list[float]:
     """Extract FP elements from a row and convert to floats.
 
     Args:
@@ -800,7 +798,7 @@ def save_vector_result_as_fp(
     exp_width: int = 6,
     man_width: int = 5,
     start_row: int = 0,
-    num_rows: Optional[int] = None,
+    num_rows: int | None = None,
     format: str = "txt",
 ) -> Path:
     """Save vector_result.mem as floating point values to a file.
@@ -850,7 +848,7 @@ def save_vector_result_as_fp(
     with open(out_file, 'w') as f:
         if format == "txt":
             # Human-readable format with header
-            f.write(f"# Vector Result FP Values\n")
+            f.write("# Vector Result FP Values\n")
             f.write(f"# Source: {filepath}\n")
             f.write(f"# VLEN: {vlen}, Format: {fp_format}\n")
             f.write(f"# Rows: {start_row} to {end_row - 1} ({end_row - start_row} rows)\n")
@@ -875,10 +873,10 @@ def save_vector_result_as_fp(
 
 def verify_vram(
     workload_dir: Path,
-    params: Dict,
+    params: dict,
     verbose: bool = True,
     save_fp_result: bool = True,
-) -> Dict:
+) -> dict:
     """Verify VRAM (vector SRAM) contents against golden result.
 
     Uses configurable FP format from params or defaults to FP12
@@ -973,7 +971,7 @@ def verify_vram(
 
     if verbose and (vram_compare_start_row > 0 or vram_compare_num_rows is not None):
         actual_compare_rows = (compare_end_elem_idx - compare_start_elem_idx + vlen - 1) // vlen
-        print(f"\nVRAM Comparison Filter:")
+        print("\nVRAM Comparison Filter:")
         print(f"  Comparing rows {vram_compare_start_row} to {vram_compare_start_row + actual_compare_rows - 1} (of {vram_total_rows} total)")
         print(f"  Elements {compare_start_elem_idx} to {compare_end_elem_idx - 1} (of {len(simulated_all)} total)")
 
@@ -985,7 +983,7 @@ def verify_vram(
         fp_format = f"FP{element_width} (1s + {exp_width}e + {man_width}m)"
 
         with open(fp_output_file, 'w') as f:
-            f.write(f"# Vector Result FP Values\n")
+            f.write("# Vector Result FP Values\n")
             f.write(f"# Source: {vram_result_file}\n")
             f.write(f"# VLEN: {vlen}, Format: {fp_format}\n")
             f.write(f"# Rows: {start_row} to {start_row + num_rows - 1}\n")
@@ -1077,11 +1075,11 @@ def save_golden_hbm(
     # Save in row-based format matching .mem file rows
     txt_path = output_dir / f"{filename}.txt"
     with open(txt_path, "w") as f:
-        f.write(f"# Golden HBM Result\n")
+        f.write("# Golden HBM Result\n")
         f.write(f"# Elements per HBM row: {elements_per_row}\n")
         f.write(f"# Rows: 0 to {num_rows - 1} (matching .mem file rows)\n")
         f.write(f"# Total elements: {num_elements}\n")
-        f.write(f"#\n")
+        f.write("#\n")
         for row_idx in range(num_rows):
             start_idx = row_idx * elements_per_row
             end_idx = min(start_idx + elements_per_row, num_elements)
@@ -1137,11 +1135,11 @@ def save_golden_vram(
     # Save in row-based format like vector_result.fp.txt
     txt_path = output_dir / f"{filename}.txt"
     with open(txt_path, "w") as f:
-        f.write(f"# Golden VRAM Result\n")
+        f.write("# Golden VRAM Result\n")
         f.write(f"# VLEN: {actual_vlen}, Format: FP32\n")
         f.write(f"# Rows: 0 to {num_rows - 1}\n")
         f.write(f"# Total elements: {num_rows * actual_vlen}\n")
-        f.write(f"#\n")
+        f.write("#\n")
         for row_idx in range(num_rows):
             f.write(f"Row {row_idx:4d}:")
             for col_idx in range(actual_vlen):

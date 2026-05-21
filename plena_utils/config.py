@@ -193,7 +193,7 @@ def update_instruction_storage_offset(instr_offset: int, config_path) -> None:
     else:
         config_file = config_path
 
-    with open(config_file, 'r') as f:
+    with open(config_file) as f:
         content = f.read()
 
     # Pattern to match INSTRUCTION_STORAGE_OFFSET line (captures everything up to end of line)

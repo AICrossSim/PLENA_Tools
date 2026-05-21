@@ -58,7 +58,7 @@ class Random_MXINT_Tensor_Generator:
             block_size = [block_size]
 
         # Get the blocked tensor to extract signs
-        blocked_x, per_block_max, padded_x_shape, block_shape = block(
+        blocked_x, _per_block_max, _padded_x_shape, _block_shape = block(
             tensor,
             block_shape=block_size,
             skip_first_dim=self.quant_config["skip_first_dim"],
@@ -67,7 +67,7 @@ class Random_MXINT_Tensor_Generator:
         per_block_sign = torch.sign(blocked_x + 1e-9)
 
         # Get quantized mantissa and scaling
-        bm_x, per_block_mantissa, per_block_scaling = _mx_int_quantize_hardware(
+        _bm_x, per_block_mantissa, per_block_scaling = _mx_int_quantize_hardware(
             tensor,
             width=self.quant_config["man_width"],
             exponent_width=self.quant_config["exp_width"],

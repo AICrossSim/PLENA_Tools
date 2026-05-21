@@ -1,7 +1,6 @@
 """Floating point addition hardware model."""
 
 import torch
-from torch import Tensor
 
 from ..common.hardware_utils import fixed_point_cast
 
@@ -15,7 +14,7 @@ def fp_add_hardware(
     ):
     out_fix_width = config["OUT_FIX_WIDTH"]
     out_fix_frac_width = config["OUT_FIX_FRAC_WIDTH"]
-    out_exp_width = config["OUT_EXP_WIDTH"]
+    config["OUT_EXP_WIDTH"]
     floor = config["FLOOR"]
 
     a_greater = a_exp > b_exp

@@ -12,7 +12,6 @@ Usage:
 
 import argparse
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
 import torch
@@ -37,14 +36,14 @@ def parse_hbm_mem_line(line: str) -> int:
 
 
 def read_hbm_mem_file(
-    hbm_path: Union[str, Path],
+    hbm_path: str | Path,
     num_elements: int,
     num_scales: int,
     element_width: int,
     scale_width: int,
     block_size: int = 8,
     row_width: int = 256,
-) -> Tuple[np.ndarray, np.ndarray]:
+) -> tuple[np.ndarray, np.ndarray]:
     """Read elements and scales from HBM .mem file.
 
     The .mem file format is:
@@ -72,7 +71,7 @@ def read_hbm_mem_file(
     scales_per_row = row_width // scale_width
 
     # Read all lines
-    with open(hbm_path, 'r') as f:
+    with open(hbm_path) as f:
         lines = [line.strip() for line in f if line.strip() and line.strip().startswith('0x')]
 
     # Calculate row counts
@@ -127,7 +126,7 @@ def read_hbm_mem_file(
 
 
 def interpret_hbm_to_float(
-    hbm_path: Union[str, Path],
+    hbm_path: str | Path,
     num_elements: int,
     mx_format: str = "mxint",
     element_width: int = 8,
@@ -136,7 +135,7 @@ def interpret_hbm_to_float(
     exp_width: int = 4,
     man_width: int = 3,
     row_width: int = 256,
-    tensor_shape: Optional[List[int]] = None,
+    tensor_shape: list[int] | None = None,
 ) -> Tensor:
     """Interpret HBM memory file and convert to floating point tensor.
 
@@ -190,8 +189,8 @@ def interpret_hbm_to_float(
 
 
 def compare_with_original(
-    hbm_path: Union[str, Path],
-    original_tensor_path: Union[str, Path],
+    hbm_path: str | Path,
+    original_tensor_path: str | Path,
     mx_format: str = "mxint",
     element_width: int = 8,
     scale_width: int = 8,
@@ -199,7 +198,7 @@ def compare_with_original(
     exp_width: int = 4,
     man_width: int = 3,
     verbose: bool = True,
-) -> Dict:
+) -> dict:
     """Compare interpreted HBM data with original tensor.
 
     Args:
@@ -249,7 +248,7 @@ def compare_with_original(
         print(f"HBM Interpretation Comparison ({mx_format.upper()} format)")
         print("=" * 60)
         print(f"Number of elements: {num_elements}")
-        print(f"Format parameters:")
+        print("Format parameters:")
         print(f"  element_width: {element_width}")
         print(f"  scale_width: {scale_width}")
         print(f"  block_size: {block_size}")
@@ -258,14 +257,14 @@ def compare_with_original(
             print(f"  man_width: {man_width}")
         print(f"\nOriginal tensor range: [{metrics['original_range'][0]:.6f}, {metrics['original_range'][1]:.6f}]")
         print(f"Interpreted range:     [{metrics['interpreted_range'][0]:.6f}, {metrics['interpreted_range'][1]:.6f}]")
-        print(f"\nError metrics:")
+        print("\nError metrics:")
         print(f"  Max absolute error: {metrics['max_abs_error']:.6f}")
         print(f"  Mean absolute error: {metrics['mean_abs_error']:.6f}")
         print(f"  Max relative error: {metrics['max_rel_error']:.6f}")
         print(f"  Mean relative error: {metrics['mean_rel_error']:.6f}")
 
         # Show sample values
-        print(f"\nSample comparisons (first 10 elements):")
+        print("\nSample comparisons (first 10 elements):")
         print(f"{'Index':<8} {'Original':<15} {'Interpreted':<15} {'Abs Error':<15}")
         print("-" * 60)
         for i in range(min(10, num_elements)):
@@ -275,7 +274,7 @@ def compare_with_original(
 
 
 def dump_hbm_raw(
-    hbm_path: Union[str, Path],
+    hbm_path: str | Path,
     num_elements: int,
     element_width: int = 8,
     scale_width: int = 8,

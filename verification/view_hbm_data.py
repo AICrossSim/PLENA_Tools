@@ -11,16 +11,15 @@ Usage:
 import argparse
 import json
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 import torch
 
 
-def parse_hbm_mem_file(filepath: Path) -> List[int]:
+def parse_hbm_mem_file(filepath: Path) -> list[int]:
     """Parse HBM .mem file to list of 256-bit row values."""
     rows = []
-    with open(filepath, 'r') as f:
+    with open(filepath) as f:
         for line in f:
             line = line.strip()
             if line.startswith('0x') or line.startswith('0X'):
@@ -29,14 +28,14 @@ def parse_hbm_mem_file(filepath: Path) -> List[int]:
 
 
 def extract_mx_data(
-    rows: List[int],
+    rows: list[int],
     start_row: int,
     num_elements: int,
     element_width: int = 8,
     scale_width: int = 8,
     block_size: int = 8,
     row_width: int = 256,
-) -> Tuple[np.ndarray, np.ndarray]:
+) -> tuple[np.ndarray, np.ndarray]:
     """Extract MX elements and scales from HBM rows.
 
     Layout: elements packed in rows, then scales packed in following rows.
@@ -166,7 +165,7 @@ def print_tensor_info(name: str, tensor: torch.Tensor, num_per_row: int = 8):
     print(f"Mean: {flat.mean().item():.6f}")
     print(f"Total elements: {flat.numel()}")
 
-    print(f"\nFirst 64 values:")
+    print("\nFirst 64 values:")
     for i in range(0, min(64, len(flat)), num_per_row):
         vals = flat[i:i+num_per_row].tolist()
         idx_str = f"[{i:4d}]"
@@ -208,7 +207,7 @@ def print_mx_data(
         fp_str = " ".join(f"{v:8.4f}" for v in blk_fp)
         print(f"    FP vals:  [{fp_str}]")
 
-    print(f"\nConverted FP values (first 64):")
+    print("\nConverted FP values (first 64):")
     for i in range(0, min(64, len(fp_values)), 8):
         vals = fp_values[i:i+8]
         idx_str = f"[{i:4d}]"

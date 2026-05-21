@@ -70,7 +70,6 @@ def load_precision_from_toml(toml_path, mode="TRANSACTIONAL", data_type="act"):
         dict: precision_settings with block_size, exp_width, man_width,
               scale_exp_width, int_width
     """
-    from pathlib import Path
 
     with open(toml_path) as f:
         config = toml.load(f)

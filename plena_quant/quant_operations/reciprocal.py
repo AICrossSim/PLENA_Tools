@@ -1,9 +1,7 @@
 """Floating point reciprocal hardware model."""
 
 import torch
-from torch import Tensor
 
-from ..common.hardware_utils import fixed_point_cast
 
 
 def fp_reciprocal(
@@ -13,7 +11,7 @@ def fp_reciprocal(
     ):
     in_fix_width = config["in_fix_width"]
     in_fix_frac_width = config["in_fix_frac_width"]
-    in_exp_width = config["in_exp_width"]
+    config["in_exp_width"]
 
     integer_mantissa_in = signed_mantissa_in * 2**(in_fix_frac_width)
     integer_exp = signed_exponent_in - in_fix_frac_width

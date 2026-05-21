@@ -46,7 +46,7 @@ class Random_MXFP_Tensor_Generator:
         if tensor.ndim == 1:
             tensor = tensor.unsqueeze(0)
 
-        bm_x, per_block_exponent, per_block_mantissa, per_block_scaling = _mx_fp_quantize_hardware(
+        _bm_x, per_block_exponent, per_block_mantissa, per_block_scaling = _mx_fp_quantize_hardware(
             tensor,
             width=self.quant_config["exp_width"] + self.quant_config["man_width"] + 1,
             exponent_width=self.quant_config["exp_width"],

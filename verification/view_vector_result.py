@@ -14,7 +14,6 @@ Usage:
 import argparse
 import sys
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
 
@@ -68,7 +67,7 @@ def extract_fp_elements_from_row(
     vlen: int = 16,
     exp_width: int = 6,
     man_width: int = 5,
-) -> List[float]:
+) -> list[float]:
     """Extract FP elements from a row and convert to floats.
 
     Args:
@@ -91,7 +90,7 @@ def extract_fp_elements_from_row(
     return values
 
 
-def parse_vector_result_file(filepath: Union[str, Path]) -> List[int]:
+def parse_vector_result_file(filepath: str | Path) -> list[int]:
     """Parse vector SRAM result file.
 
     File format (hex values, one per line):
@@ -108,7 +107,7 @@ def parse_vector_result_file(filepath: Union[str, Path]) -> List[int]:
     data = []
     filepath = Path(filepath)
 
-    with open(filepath, 'r') as f:
+    with open(filepath) as f:
         for line in f:
             line = line.strip()
             if not line or line.startswith("//"):
@@ -127,15 +126,15 @@ def parse_vector_result_file(filepath: Union[str, Path]) -> List[int]:
 
 
 def view_vector_result_as_fp(
-    filepath: Union[str, Path],
+    filepath: str | Path,
     vlen: int = 16,
     exp_width: int = 6,
     man_width: int = 5,
     start_row: int = 0,
-    num_rows: Optional[int] = None,
-    output_file: Optional[Union[str, Path]] = None,
+    num_rows: int | None = None,
+    output_file: str | Path | None = None,
     verbose: bool = True,
-) -> Dict:
+) -> dict:
     """Parse vector_result.mem and convert all data to floating point.
 
     Args:
@@ -178,7 +177,7 @@ def view_vector_result_as_fp(
 
     if verbose:
         print("=" * 70)
-        print(f"Vector Result FP Viewer")
+        print("Vector Result FP Viewer")
         print("=" * 70)
         print(f"  File: {filepath}")
         print(f"  VLEN: {vlen}")
@@ -223,7 +222,7 @@ def view_vector_result_as_fp(
     if output_file:
         output_path = Path(output_file)
         with open(output_path, 'w') as f:
-            f.write(f"# Vector Result FP Values\n")
+            f.write("# Vector Result FP Values\n")
             f.write(f"# File: {filepath}\n")
             f.write(f"# VLEN: {vlen}, FP Format: {fp_format}\n")
             f.write(f"# Rows: {start_row} to {end_row - 1}\n")
@@ -265,12 +264,12 @@ def view_vector_result_as_fp(
 
 
 def view_vector_result_as_hex(
-    filepath: Union[str, Path],
+    filepath: str | Path,
     vlen: int = 16,
     exp_width: int = 6,
     man_width: int = 5,
     start_row: int = 0,
-    num_rows: Optional[int] = None,
+    num_rows: int | None = None,
 ) -> None:
     """Display vector_result.mem with raw hex element values.
 
@@ -292,7 +291,7 @@ def view_vector_result_as_hex(
     end_row = total_rows if num_rows is None else min(start_row + num_rows, total_rows)
 
     print("=" * 70)
-    print(f"Vector Result Hex Viewer")
+    print("Vector Result Hex Viewer")
     print("=" * 70)
     print(f"  File: {filepath}")
     print(f"  VLEN: {vlen}, Element width: {element_width} bits")
@@ -309,12 +308,12 @@ def view_vector_result_as_hex(
 
 
 def view_vector_result_as_binary(
-    filepath: Union[str, Path],
+    filepath: str | Path,
     vlen: int = 16,
     exp_width: int = 6,
     man_width: int = 5,
     start_row: int = 0,
-    num_rows: Optional[int] = None,
+    num_rows: int | None = None,
 ) -> None:
     """Display vector_result.mem with binary breakdown of FP fields.
 
@@ -339,7 +338,7 @@ def view_vector_result_as_binary(
     bias = (1 << (exp_width - 1)) - 1
 
     print("=" * 90)
-    print(f"Vector Result Binary Viewer")
+    print("Vector Result Binary Viewer")
     print("=" * 90)
     print(f"  File: {filepath}")
     print(f"  VLEN: {vlen}, FP{element_width} (1s + {exp_width}e + {man_width}m), bias={bias}")

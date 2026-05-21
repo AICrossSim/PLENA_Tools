@@ -1,11 +1,11 @@
 import os
 from pathlib import Path
 
-# Derive project root: this file is at PLENA_Tools/sim_env_utils/build_sys_tools.py
-PROJECT_PATH = Path(__file__).resolve().parent.parent.parent
-
 from memory_mapping import generate_hbm
 from assembler.assembly_to_binary import AssemblyToBinary
+
+# Derive project root: this file is at PLENA_Tools/sim_env_utils/build_sys_tools.py
+PROJECT_PATH = Path(__file__).resolve().parent.parent.parent
 
 # Default instruction storage offset (from configuration.svh)
 INSTRUCTION_STORAGE_OFFSET = 8192
@@ -72,7 +72,7 @@ def read_instructions_from_mem(mem_file_path: Path) -> list:
     if not mem_file_path.exists():
         return instructions
 
-    with open(mem_file_path, 'r') as f:
+    with open(mem_file_path) as f:
         for line in f:
             line = line.strip()
             # Skip empty lines and comments

@@ -4,7 +4,7 @@ import torch
 from torch import Tensor
 from torch.nn import functional as F
 
-from .utils import block, my_clamp, unblock, my_round
+from .utils import my_clamp
 from .minifloat import _minifloat_ieee_quantize
 
 

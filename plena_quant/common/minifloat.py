@@ -11,7 +11,7 @@ def _minifloat_denorm_quantize_hardware(
     x: Tensor,
     width: int,
     exponent_width: int,
-    exponent_bias: int = None,
+    exponent_bias: int | None = None,
 ):
     """
     - Converts IEEE FP32/64 to minifloat without the implicit leading bit in mantissas.
@@ -72,7 +72,7 @@ def _minifloat_denorm_quantize_hardware(
 
 
 def _minifloat_ieee_quantize_hardware(
-    x: Tensor, width: int, exponent_width: int, exponent_bias: int = None
+    x: Tensor, width: int, exponent_width: int, exponent_bias: int | None = None
 ):
     """
     - Converts IEEE FP32/64 to minifloat with the implicit leading bit in mantissas.

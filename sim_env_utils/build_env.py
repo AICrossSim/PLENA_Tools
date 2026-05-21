@@ -1,8 +1,10 @@
-from .build_sys_tools import *
 import logging
-from plena_utils import Random_MXFP_Tensor_Generator, Random_MXINT_Tensor_Generator
 from pathlib import Path
+
 import torch
+
+from plena_utils import Random_MXFP_Tensor_Generator, Random_MXINT_Tensor_Generator
+from .build_sys_tools import PROJECT_PATH, init_mem, env_setup
 
 logger = logging.getLogger("testbench")
 logger.setLevel(logging.DEBUG)
@@ -70,8 +72,8 @@ def create_mem_for_sim(
     specified_data_order=None,
     build_path=None,
     hbm_row_width: int = 256,
-    mx_format: str = None,
-    instr_storage_offset: int = None,
+    mx_format: str | None = None,
+    instr_storage_offset: int | None = None,
 ):
     """
     Create memory files for simulation.

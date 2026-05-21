@@ -1,12 +1,8 @@
 """Floating point exponential hardware model."""
 
 import torch
-from torch import Tensor
-import math
 import logging
 
-from ..common.hardware_utils import fixed_point_cast
-from ..common.minifloat import _minifloat_ieee_quantize_hardware
 
 try:
     from cfl_tools.logger import get_logger
@@ -49,13 +45,13 @@ def fp_exp_hardware(signed_exp_in: torch.Tensor, signed_mant_in: torch.Tensor, c
     4. Apply Taylor series to fractional part: 2^f ≈ 1 + ln(2)*f + ln²(2)*f²/2! + ln³(2)*f³/3!
     5. Return integer part as exponent and Taylor result as mantissa
     """
-    in_exp_width = config["in_exp_width"]
+    config["in_exp_width"]
     in_fix_width = config["in_fix_width"]
     in_fix_frac_width = config["in_fix_frac_width"]
     extend_width = config.get("extend_width", 0)
-    out_exp_width = config["out_exp_width"]
-    out_fix_width = config["out_fix_width"]
-    out_fix_frac_width = config["out_fix_frac_width"]
+    config["out_exp_width"]
+    config["out_fix_width"]
+    config["out_fix_frac_width"]
 
     # Step 1: Multiply mantissa by MLOG2_E (log2(e) coefficient)
     # MLOG2_E = 92 in hardware (this is log2(e) * 2^6 for Q1.6 format)
@@ -136,7 +132,6 @@ def tayor_exp(x: torch.Tensor):
         Range reduction of x
         """
         MLOG2_E = 92/2**7
-        ELOG2_E = 1
         new_mx = x * MLOG2_E * 2
         logger.debug(f"new_mx: {new_mx}")
         integ = new_mx.floor()

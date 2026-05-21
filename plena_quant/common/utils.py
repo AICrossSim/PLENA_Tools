@@ -2,7 +2,6 @@
 
 from logging import getLogger
 from math import ceil
-from typing import List
 
 import torch
 from torch import Tensor
@@ -57,7 +56,7 @@ my_floor = MyFloor.apply
 # --------------------------------
 
 
-def _infer_block_shape(x_shape: List[int], block_shape: List[int]):
+def _infer_block_shape(x_shape: list[int], block_shape: list[int]):
     """
     Infer a reasonable block shape.
     - right align block_shape with x_shape,
@@ -85,7 +84,7 @@ def _infer_block_shape(x_shape: List[int], block_shape: List[int]):
     return inferred_block_shape
 
 
-def _infer_padding_shape(x_shape: List[int], block_shape: List[int]):
+def _infer_padding_shape(x_shape: list[int], block_shape: list[int]):
     """
     Calculate paddings to make x_shape[i] divisable by block_shape[i]
     """
@@ -101,7 +100,7 @@ def _infer_padding_shape(x_shape: List[int], block_shape: List[int]):
     return pad_diff
 
 
-def _block_1d_bias(x: Tensor, block_shape: List[int]):
+def _block_1d_bias(x: Tensor, block_shape: list[int]):
     """
     bias shape: [output_features] -> [num_blocks, block_size]
 
@@ -124,7 +123,7 @@ def _block_1d_bias(x: Tensor, block_shape: List[int]):
 
 def _unblock_to_1d_bias(
     blocked_x: Tensor,
-    x_shape_before_blocking: List[int],
+    x_shape_before_blocking: list[int],
 ):
     """
     blocked bias shape: [num_blocks, block_size] -> [output_features]
@@ -142,7 +141,7 @@ def _unblock_to_1d_bias(
     return x
 
 
-def _block_2d_activation(x: Tensor, block_shape: List[int]):
+def _block_2d_activation(x: Tensor, block_shape: list[int]):
     """
     [batch_size, hidden_size] -> [batch_size, num_blocks, block_size[-1]]
     """
@@ -162,7 +161,7 @@ def _block_2d_activation(x: Tensor, block_shape: List[int]):
     return blocked_x, per_block_max, padded_x_shape, block_shape
 
 
-def _unblock_to_2d_activation(blocked_x: Tensor, x_shape_before_blocking: List[int]):
+def _unblock_to_2d_activation(blocked_x: Tensor, x_shape_before_blocking: list[int]):
     """
     [batch_size, num_blocks, block_size] -> [batch_size, hidden_size]
     """
@@ -176,7 +175,7 @@ def _unblock_to_2d_activation(blocked_x: Tensor, x_shape_before_blocking: List[i
     return x
 
 
-def _block_2d_weight(x: Tensor, block_shape: List[int]):
+def _block_2d_weight(x: Tensor, block_shape: list[int]):
     """
     [in_features, out_features] -> [block_size_0 * block_size_1, num_blocks]
 
@@ -226,7 +225,7 @@ def _unblock_to_2d_weight(
     return x
 
 
-def _block_3d_activation(x: Tensor, block_shape: List[int]):
+def _block_3d_activation(x: Tensor, block_shape: list[int]):
     """
     [batch_size, hidden_dim_0, hidden_dim_1] -> [batch_size, block_size_0 * block_size_1, num_blocks]
 
@@ -276,7 +275,7 @@ def _unblock_to_3d_activation(
     return x
 
 
-def block(x: Tensor, block_shape: List[int], skip_first_dim: bool = False):
+def block(x: Tensor, block_shape: list[int], skip_first_dim: bool = False):
     """
     - skip_first_dim (bool): If True, block_shape[0] will always take 1.
 
@@ -304,9 +303,9 @@ def block(x: Tensor, block_shape: List[int], skip_first_dim: bool = False):
 
 def unblock(
     blocked_x: Tensor,
-    x_shape_before_blocking: List[int],
+    x_shape_before_blocking: list[int],
     padded_x_shape,
-    block_shape: List[int],
+    block_shape: list[int],
     skipped_first_dim_when_blocking: bool = True,
 ):
     if len(x_shape_before_blocking) == 1:
@@ -333,7 +332,5 @@ def unblock(
             raise NotImplementedError("unblock to 3d weight is not supported")
     else:
         raise RuntimeError(
-            "Unsupported n.dims ({}) to unblock back".format(
-                len(x_shape_before_blocking)
-            )
+            f"Unsupported n.dims ({len(x_shape_before_blocking)}) to unblock back"
         )
