@@ -217,7 +217,17 @@ if __name__ == "__main__":
     script_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     vram_file = os.path.join(script_dir, "transactional_emulator", "vram_dump.bin")
     mram_file = os.path.join(script_dir, "transactional_emulator", "mram_dump.bin")
-    golden_file = os.path.join(script_dir, "transactional_emulator", "testbench", "build", "golden_result.txt")
+
+    # Resolve the build dir. The `just build-emulator` flow writes to
+    # transactional_emulator/build; older/RTL flows used .../testbench/build.
+    # Prefer the former, fall back to the latter.
+    _build_candidates = [
+        os.path.join(script_dir, "transactional_emulator", "build"),
+        os.path.join(script_dir, "transactional_emulator", "testbench", "build"),
+    ]
+    build_dir = next((d for d in _build_candidates if os.path.isdir(d)), _build_candidates[0])
+
+    golden_file = os.path.join(build_dir, "golden_result.txt")
     # VRAM uses BF16 format by default: sign=1, exponent=8, mantissa=7 (16 bits total = 2 bytes)
 
     # Load comparison params to know which rows to display
@@ -225,7 +235,16 @@ if __name__ == "__main__":
 
     from verification.check_mem import compare_fpsram_with_golden, compare_vram_with_golden, print_comparison_results
 
-    params_file = os.path.join(script_dir, "transactional_emulator", "testbench", "build", "verification_params.json")
+    # The emulator flow writes comparison_params.json; the RTL flow writes
+    # verification_params.json. Accept whichever is present.
+    params_file = next(
+        (
+            os.path.join(build_dir, n)
+            for n in ("comparison_params.json", "verification_params.json")
+            if os.path.exists(os.path.join(build_dir, n))
+        ),
+        os.path.join(build_dir, "comparison_params.json"),
+    )
     with open(params_file) as f:
         params = json.load(f)
 
@@ -331,9 +350,7 @@ if __name__ == "__main__":
         # FPSRAM comparison if enabled
         if params.get("compare_fpsram", False):
             fpsram_file = os.path.join(script_dir, "transactional_emulator", "fpsram_dump.bin")
-            golden_fpsram_file = os.path.join(
-                script_dir, "transactional_emulator", "testbench", "build", "golden_fpsram.pt"
-            )
+            golden_fpsram_file = os.path.join(build_dir, "golden_fpsram.pt")
 
             if os.path.exists(fpsram_file) and os.path.exists(golden_fpsram_file):
                 golden_fpsram = torch.load(golden_fpsram_file)
