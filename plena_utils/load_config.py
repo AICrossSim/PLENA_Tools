@@ -115,6 +115,7 @@ def load_precision_from_svh(definitions_path, data_type="act"):
             config_settings: dict with raw config from configuration.svh
     """
     from pathlib import Path
+
     definitions_path = Path(definitions_path)
 
     precision_svh = definitions_path / "precision.svh"

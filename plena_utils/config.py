@@ -203,7 +203,7 @@ def update_instruction_storage_offset(instr_offset: int, config_path) -> None:
 
     new_content = re.sub(pattern, replacement, content)
 
-    with open(config_file, 'w') as f:
+    with open(config_file, "w") as f:
         f.write(new_content)
 
 

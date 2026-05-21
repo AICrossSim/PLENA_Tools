@@ -18,7 +18,7 @@ import numpy as np
 def parse_hbm_mem_line(line: str) -> int:
     """Parse a hex line from hbm.mem file."""
     line = line.strip()
-    if line.startswith('0x') or line.startswith('0X'):
+    if line.startswith("0x") or line.startswith("0X"):
         return int(line, 16)
     return 0
 
@@ -41,7 +41,7 @@ def mxint_to_float(element: int, scale: int, int_width: int = 8, scale_width: in
 
     # Scale factor
     actual_exp = int(scale) - scale_bias
-    scale_factor = 2.0 ** actual_exp
+    scale_factor = 2.0**actual_exp
 
     value = normalized * scale_factor
     if sign:
@@ -50,9 +50,16 @@ def mxint_to_float(element: int, scale: int, int_width: int = 8, scale_width: in
     return value
 
 
-def read_hbm_mxint(hbm_path: Path, num_elements: int, block_size: int = 8,
-                   element_width: int = 8, scale_width: int = 8, row_width: int = 256,
-                   total_element_rows: int | None = None, scale_start_row: int | None = None):
+def read_hbm_mxint(
+    hbm_path: Path,
+    num_elements: int,
+    block_size: int = 8,
+    element_width: int = 8,
+    scale_width: int = 8,
+    row_width: int = 256,
+    total_element_rows: int | None = None,
+    scale_start_row: int | None = None,
+):
     """Read MXINT data from hbm.mem and convert to float.
 
     Args:
@@ -75,7 +82,7 @@ def read_hbm_mxint(hbm_path: Path, num_elements: int, block_size: int = 8,
     scale_rows = (num_blocks + scales_per_row - 1) // scales_per_row
 
     with open(hbm_path) as f:
-        lines = [line.strip() for line in f if line.strip() and line.strip().startswith('0x')]
+        lines = [line.strip() for line in f if line.strip() and line.strip().startswith("0x")]
 
     # Auto-detect scale start row by finding where scale-like data begins
     # Scale data has characteristic pattern: mostly 0x7F/0x80 (biased exp around 0-1)
@@ -86,9 +93,9 @@ def read_hbm_mxint(hbm_path: Path, num_elements: int, block_size: int = 8,
             # Try to auto-detect: find first row that looks like scale data
             scale_start_row = element_rows  # Default fallback
             for i in range(len(lines)):
-                row_hex = lines[i][2:] if lines[i].startswith('0x') else lines[i]
+                row_hex = lines[i][2:] if lines[i].startswith("0x") else lines[i]
                 # Scale rows have mostly 0x7E, 0x7F, 0x80, 0x81 bytes (biased exp near 0)
-                byte_vals = [int(row_hex[j:j+2], 16) for j in range(0, min(len(row_hex), 16), 2)]
+                byte_vals = [int(row_hex[j : j + 2], 16) for j in range(0, min(len(row_hex), 16), 2)]
                 if len(byte_vals) >= 4:
                     near_center = sum(1 for b in byte_vals if 0x7D <= b <= 0x82)
                     if near_center >= len(byte_vals) * 0.7:  # 70% of bytes are scale-like
@@ -236,8 +243,8 @@ def main():
 
         print(f"  Block {block_idx}: scale={scale} (0x{scale:02X}) => 2^{actual_exp}")
         print(f"    Raw:     [{', '.join(f'0x{e:02X}' for e in block_elems)}]")
-        print(f"    Decoded: [{', '.join(f'{decoded[start+i]:8.4f}' for i in range(8))}]")
-        print(f"    Original:[{', '.join(f'{original_flat[start+i]:8.4f}' for i in range(8))}]")
+        print(f"    Decoded: [{', '.join(f'{decoded[start + i]:8.4f}' for i in range(8))}]")
+        print(f"    Original:[{', '.join(f'{original_flat[start + i]:8.4f}' for i in range(8))}]")
         print()
 
     # Compute error metrics
@@ -263,8 +270,10 @@ def main():
     print("\nWorst 5 errors:")
     print(f"  {'Index':<8} {'Original':<12} {'Decoded':<12} {'Abs Error':<12} {'Rel Error':<12}")
     for idx in worst_indices:
-        print(f"  {idx:<8} {original_flat[idx]:<12.6f} {decoded[idx]:<12.6f} "
-              f"{abs_error[idx]:<12.6f} {rel_error[idx]:<12.6f}")
+        print(
+            f"  {idx:<8} {original_flat[idx]:<12.6f} {decoded[idx]:<12.6f} "
+            f"{abs_error[idx]:<12.6f} {rel_error[idx]:<12.6f}"
+        )
 
 
 if __name__ == "__main__":

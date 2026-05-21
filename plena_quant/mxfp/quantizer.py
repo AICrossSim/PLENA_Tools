@@ -43,18 +43,20 @@ def _mx_fp_quantize_hardware(
     x_pad_size_1 = (block_size[1] - (x_shape[-1] % block_size[1])) % block_size[1]
 
     # Pad x if needed
-    px = F.pad(x, (0, x_pad_size_1, 0, x_pad_size_0), 'constant', 0)
+    px = F.pad(x, (0, x_pad_size_1, 0, x_pad_size_0), "constant", 0)
     px_shape = px.shape
 
     # in order to follow the law of torch.mm
     # px will be reshaped to (-1, number_of_blocks_0, block_size[0], number_of_blocks_1, block_size[1])
     # and be view as (-1, number_of_blocks_0, number_of_blocks_1, block_size[0], block_size[1])
-    px = px.view(-1, px_shape[-2]//block_size[0], block_size[0], px_shape[-1]//block_size[1], block_size[1]).permute(0, 1, 3, 2, 4)
+    px = px.view(
+        -1, px_shape[-2] // block_size[0], block_size[0], px_shape[-1] // block_size[1], block_size[1]
+    ).permute(0, 1, 3, 2, 4)
     px = px.reshape(-1, block_size[0] * block_size[1])
 
     per_block_max = px.abs().max(dim=-1, keepdim=True).values + 1e-9
     per_block_exponent_bias = my_clamp(
-        torch.floor(torch.log2(per_block_max)), -2**(exponent_bias_width - 1), 2**(exponent_bias_width - 1) - 1
+        torch.floor(torch.log2(per_block_max)), -(2 ** (exponent_bias_width - 1)), 2 ** (exponent_bias_width - 1) - 1
     )
 
     px = px / 2**per_block_exponent_bias
@@ -66,12 +68,14 @@ def _mx_fp_quantize_hardware(
 
     per_block_bm_x = per_block_bm_x * 2**per_block_exponent_bias
 
-    bm_x = per_block_bm_x.reshape(-1, px_shape[0]//block_size[0], px_shape[1]//block_size[1], block_size[0], block_size[1])
+    bm_x = per_block_bm_x.reshape(
+        -1, px_shape[0] // block_size[0], px_shape[1] // block_size[1], block_size[0], block_size[1]
+    )
     bm_x = bm_x.permute(0, 1, 3, 2, 4)
     bm_x = bm_x.reshape(-1, px_shape[-2], px_shape[-1])
-    bm_x = bm_x[:, :x_shape[-2], :x_shape[-1]]
+    bm_x = bm_x[:, : x_shape[-2], : x_shape[-1]]
 
-    bias_bias = 2**(exponent_bias_width - 1) - 1
+    bias_bias = 2 ** (exponent_bias_width - 1) - 1
     per_block_exponent_bias = per_block_exponent_bias + bias_bias
 
     return bm_x, per_block_fp_exp, per_block_fp_mant, per_block_exponent_bias

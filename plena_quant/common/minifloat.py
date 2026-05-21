@@ -59,9 +59,7 @@ def _minifloat_denorm_quantize_hardware(
     shift = 2**mantissa_bits
     shifted_mantissa = my_round(mantissa * shift)
     # clip the integer mantissa.
-    shifted_mantissa = my_clamp(
-        shifted_mantissa, shifted_mantissa_min, shifted_mantissa_max
-    )
+    shifted_mantissa = my_clamp(shifted_mantissa, shifted_mantissa_min, shifted_mantissa_max)
     mantissa = shifted_mantissa / shift
     # fmt: off
     # this `is_close_to_0` helps the grad keeps 1 if input x is 0, or the zero-initialized value will be trapped in 0
@@ -71,9 +69,7 @@ def _minifloat_denorm_quantize_hardware(
     return minifloat_denorm_x, exponent, sign * mantissa
 
 
-def _minifloat_ieee_quantize_hardware(
-    x: Tensor, width: int, exponent_width: int, exponent_bias: int | None = None
-):
+def _minifloat_ieee_quantize_hardware(x: Tensor, width: int, exponent_width: int, exponent_bias: int | None = None):
     """
     - Converts IEEE FP32/64 to minifloat with the implicit leading bit in mantissas.
     - No representation for +/-inf or NaN. Large IEEE FP32/64 values will saturate.

@@ -96,13 +96,11 @@ class Random_MXINT_Tensor_Generator:
         for i in range(per_block_mantissa.shape[0]):
             # Get unsigned mantissa scaled to integer
             # mantissa is in range [0, 1), scale by 2^magnitude_bits
-            mantissa_int = (per_block_mantissa[i] * 2 ** magnitude_bits).int()
+            mantissa_int = (per_block_mantissa[i] * 2**magnitude_bits).int()
 
             # Get sign bits (1 for negative, 0 for positive)
             sign_bits = torch.where(
-                per_block_sign[i] < 0,
-                torch.tensor(1, dtype=torch.int),
-                torch.tensor(0, dtype=torch.int)
+                per_block_sign[i] < 0, torch.tensor(1, dtype=torch.int), torch.tensor(0, dtype=torch.int)
             )
 
             # Pack: sign_bit << magnitude_bits | mantissa

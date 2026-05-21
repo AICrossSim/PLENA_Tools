@@ -6,6 +6,7 @@ import logging
 
 try:
     from cfl_tools.logger import get_logger
+
     logger = get_logger(__name__)
 except ImportError:
     logger = logging.getLogger(__name__)
@@ -28,8 +29,8 @@ def hardware_dynamic_shift(x: torch.Tensor, shift_amt: torch.Tensor, out_width):
     """
     x_sign = x.sign()
     x_abs = x.abs()
-    max_data = 2**(out_width - 1) - 1
-    x_abs_shifted = (x_abs * (2** shift_amt)).floor()
+    max_data = 2 ** (out_width - 1) - 1
+    x_abs_shifted = (x_abs * (2**shift_amt)).floor()
     x_abs_shifted = torch.clamp(x_abs_shifted, 0, max_data)
     return x_sign * x_abs_shifted
 
@@ -55,29 +56,30 @@ def fp_exp_hardware(signed_exp_in: torch.Tensor, signed_mant_in: torch.Tensor, c
 
     # Step 1: Multiply mantissa by MLOG2_E (log2(e) coefficient)
     # MLOG2_E = 92 in hardware (this is log2(e) * 2^6 for Q1.6 format)
-    MLOG2_E = 92/2**7
+    MLOG2_E = 92 / 2**7
     ELOG2_E = 1
 
     # Convert signed mantissa to unsigned for multiplication
     # Multiply by log2(e) coefficient (fixed point multiplication)
-    signed_mant_log2_e = signed_mant_in * MLOG2_E * (2**(in_fix_frac_width + extend_width))
-    signed_mant_log2_e = hardware_round(signed_mant_log2_e) / (2**(in_fix_frac_width + extend_width))
+    signed_mant_log2_e = signed_mant_in * MLOG2_E * (2 ** (in_fix_frac_width + extend_width))
+    signed_mant_log2_e = hardware_round(signed_mant_log2_e) / (2 ** (in_fix_frac_width + extend_width))
     logger.debug(f"signed_mant_in: {signed_mant_in}")
     logger.debug(f"signed_mant_log2_e: {signed_mant_log2_e}")
     # Adjust exponent
     signed_exp_log2_e = signed_exp_in + ELOG2_E
 
-
     # Step 2: Apply exponent scaling (shift mantissa by exponent)
     # This creates fixed point data with integer and fractional parts
     FIXED_POINT_WIDTH = in_fix_width + 10
-    FIX_POINT_MAX = (2**(FIXED_POINT_WIDTH - 1)- 1)/2**(in_fix_frac_width)
-    FIX_POINT_MIN = -2**(FIXED_POINT_WIDTH - 1)/2**(in_fix_frac_width)
+    FIX_POINT_MAX = (2 ** (FIXED_POINT_WIDTH - 1) - 1) / 2 ** (in_fix_frac_width)
+    FIX_POINT_MIN = -(2 ** (FIXED_POINT_WIDTH - 1)) / 2 ** (in_fix_frac_width)
 
-    fixed_point_data = signed_mant_log2_e * (2 ** signed_exp_log2_e)
+    fixed_point_data = signed_mant_log2_e * (2**signed_exp_log2_e)
     logger.debug(f"fixed_point_data: {fixed_point_data}")
     taylor_frac_width = in_fix_frac_width + extend_width
-    fixed_point_data = hardware_dynamic_shift(signed_mant_log2_e*2**(taylor_frac_width), signed_exp_log2_e, FIXED_POINT_WIDTH)/2**(taylor_frac_width)
+    fixed_point_data = hardware_dynamic_shift(
+        signed_mant_log2_e * 2 ** (taylor_frac_width), signed_exp_log2_e, FIXED_POINT_WIDTH
+    ) / 2 ** (taylor_frac_width)
     fixed_point_data = torch.clamp(fixed_point_data, FIX_POINT_MIN, FIX_POINT_MAX)
     logger.debug(f"fixed_point_data: {fixed_point_data}")
 
@@ -93,7 +95,7 @@ def fp_exp_hardware(signed_exp_in: torch.Tensor, signed_mant_in: torch.Tensor, c
     # The RTL assigns signed_exp_out = signed_exp_in (pass through)
     # The RTL assigns signed_mant_out = taylor_output
     output_exp = fixed_point_int_part
-    output_mant = (taylor_result * 2**(in_fix_frac_width)).floor()/2**(in_fix_frac_width)
+    output_mant = (taylor_result * 2 ** (in_fix_frac_width)).floor() / 2 ** (in_fix_frac_width)
     logger.debug(f"fixed_point_frac_part: {fixed_point_frac_part}, taylor_result: {taylor_result}")
 
     return output_exp, output_mant
@@ -109,17 +111,19 @@ def taylor_series_hardware(x: torch.Tensor, frac_width: int):
     # Calculate Taylor series terms: 2^x ≈ 1 + ln(2)*x + ln²(2)*x²/2! + ln³(2)*x³/3!
     term0 = 1.0
 
-    term1 = x * ln2 * (2**(frac_width))
-    term1 = hardware_round(term1) / (2**(frac_width))
+    term1 = x * ln2 * (2 ** (frac_width))
+    term1 = hardware_round(term1) / (2 ** (frac_width))
 
-    term2 = (term1 * term1 * 2**(frac_width))
-    term2 = hardware_round(term2) //2 / (2**(frac_width))
-    term3_inter = ((term2 * term1 )*2**(frac_width))
-    term3_inter = hardware_round(term3_inter) / 2**(frac_width)
-    term3 = term3_inter / 3 * 2**(frac_width)
-    term3 = hardware_round(term3) / (2**(frac_width))
+    term2 = term1 * term1 * 2 ** (frac_width)
+    term2 = hardware_round(term2) // 2 / (2 ** (frac_width))
+    term3_inter = (term2 * term1) * 2 ** (frac_width)
+    term3_inter = hardware_round(term3_inter) / 2 ** (frac_width)
+    term3 = term3_inter / 3 * 2 ** (frac_width)
+    term3 = hardware_round(term3) / (2 ** (frac_width))
 
-    logger.debug(f"term0: {term0 * 2**(frac_width)}, term1: {term1 * 2**(frac_width)}, term2: {term2 * 2**(frac_width)}, term3: {term3 * 2**(frac_width)}")
+    logger.debug(
+        f"term0: {term0 * 2 ** (frac_width)}, term1: {term1 * 2 ** (frac_width)}, term2: {term2 * 2 ** (frac_width)}, term3: {term3 * 2 ** (frac_width)}"
+    )
     return term0 + term1 + term2 + term3
 
 
@@ -127,11 +131,12 @@ def tayor_exp(x: torch.Tensor):
     """
     Taylor series expansion of 2^x for testing
     """
+
     def range_reduction(x: torch.Tensor):
         """
         Range reduction of x
         """
-        MLOG2_E = 92/2**7
+        MLOG2_E = 92 / 2**7
         new_mx = x * MLOG2_E * 2
         logger.debug(f"new_mx: {new_mx}")
         integ = new_mx.floor()
@@ -142,7 +147,7 @@ def tayor_exp(x: torch.Tensor):
         """
         Taylor series expansion of 2^x for testing
         """
-        ln2 = 22/2**5
+        ln2 = 22 / 2**5
         term0 = 1.0
         term1 = frac * ln2
         term2 = term1 * term1 / 2

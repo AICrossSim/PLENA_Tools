@@ -30,7 +30,7 @@ def parse_hbm_mem_line(line: str) -> int:
         Integer value of the hex data
     """
     line = line.strip()
-    if line.startswith('0x') or line.startswith('0X'):
+    if line.startswith("0x") or line.startswith("0X"):
         return int(line, 16)
     return 0
 
@@ -72,7 +72,7 @@ def read_hbm_mem_file(
 
     # Read all lines
     with open(hbm_path) as f:
-        lines = [line.strip() for line in f if line.strip() and line.strip().startswith('0x')]
+        lines = [line.strip() for line in f if line.strip() and line.strip().startswith("0x")]
 
     # Calculate row counts
     num_blocks = (num_elements + block_size - 1) // block_size
@@ -158,21 +158,22 @@ def interpret_hbm_to_float(
 
     # Read raw data
     elements, scales = read_hbm_mem_file(
-        hbm_path, num_elements, num_scales,
-        element_width, scale_width, block_size, row_width
+        hbm_path, num_elements, num_scales, element_width, scale_width, block_size, row_width
     )
 
     # Convert to float
     if mx_format.lower() == "mxint":
         float_values = mxint_to_float(
-            elements, scales,
+            elements,
+            scales,
             int_width=element_width,
             scale_width=scale_width,
             block_size=block_size,
         )
     else:  # mxfp
         float_values = mx_to_float(
-            elements, scales,
+            elements,
+            scales,
             exp_width=exp_width,
             man_width=man_width,
             scale_width=scale_width,
@@ -225,9 +226,7 @@ def compare_with_original(
 
     # Interpret HBM
     interpreted = interpret_hbm_to_float(
-        hbm_path, num_elements, mx_format,
-        element_width, scale_width, block_size,
-        exp_width, man_width
+        hbm_path, num_elements, mx_format, element_width, scale_width, block_size, exp_width, man_width
     )
 
     # Compute metrics
@@ -298,8 +297,7 @@ def dump_hbm_raw(
     num_scales = (num_elements + block_size - 1) // block_size
 
     elements, scales = read_hbm_mem_file(
-        hbm_path, num_elements, num_scales,
-        element_width, scale_width, block_size, row_width
+        hbm_path, num_elements, num_scales, element_width, scale_width, block_size, row_width
     )
 
     print(f"HBM Raw Data Dump ({mx_format.upper()} format)")
@@ -332,7 +330,7 @@ def dump_hbm_raw(
                 sign = (elem >> (element_width - 1)) & 1
                 magnitude = elem & ((1 << (element_width - 1)) - 1)
                 normalized = magnitude / (1 << (element_width - 1))
-                fp_val = normalized * (2.0 ** actual_scale_exp)
+                fp_val = normalized * (2.0**actual_scale_exp)
                 if sign:
                     fp_val = -fp_val
                 print(f"    [{j}] 0x{elem:02X} = {sign}|{magnitude:07b} => {fp_val:12.6f}")
@@ -344,29 +342,20 @@ def dump_hbm_raw(
 
 def main():
     """CLI entry point."""
-    parser = argparse.ArgumentParser(
-        description="HBM Memory Interpreter - decode hbm.mem to floating point"
-    )
+    parser = argparse.ArgumentParser(description="HBM Memory Interpreter - decode hbm.mem to floating point")
     parser.add_argument("hbm_path", help="Path to hbm.mem file")
     parser.add_argument("--original", "-o", help="Path to original .pt tensor for comparison")
-    parser.add_argument("--format", "-f", choices=["mxint", "mxfp"], default="mxint",
-                        help="Data format (default: mxint)")
-    parser.add_argument("--num-elements", "-n", type=int, default=1024,
-                        help="Number of elements to read")
-    parser.add_argument("--element-width", type=int, default=8,
-                        help="Element bit width (default: 8)")
-    parser.add_argument("--scale-width", type=int, default=8,
-                        help="Scale bit width (default: 8)")
-    parser.add_argument("--block-size", type=int, default=8,
-                        help="Block size (default: 8)")
-    parser.add_argument("--exp-width", type=int, default=4,
-                        help="MXFP exponent width (default: 4)")
-    parser.add_argument("--man-width", type=int, default=3,
-                        help="MXFP mantissa width (default: 3)")
-    parser.add_argument("--dump-raw", "-d", action="store_true",
-                        help="Dump raw HBM data")
-    parser.add_argument("--num-blocks", type=int, default=4,
-                        help="Number of blocks to show in raw dump")
+    parser.add_argument(
+        "--format", "-f", choices=["mxint", "mxfp"], default="mxint", help="Data format (default: mxint)"
+    )
+    parser.add_argument("--num-elements", "-n", type=int, default=1024, help="Number of elements to read")
+    parser.add_argument("--element-width", type=int, default=8, help="Element bit width (default: 8)")
+    parser.add_argument("--scale-width", type=int, default=8, help="Scale bit width (default: 8)")
+    parser.add_argument("--block-size", type=int, default=8, help="Block size (default: 8)")
+    parser.add_argument("--exp-width", type=int, default=4, help="MXFP exponent width (default: 4)")
+    parser.add_argument("--man-width", type=int, default=3, help="MXFP mantissa width (default: 3)")
+    parser.add_argument("--dump-raw", "-d", action="store_true", help="Dump raw HBM data")
+    parser.add_argument("--num-blocks", type=int, default=4, help="Number of blocks to show in raw dump")
 
     args = parser.parse_args()
 

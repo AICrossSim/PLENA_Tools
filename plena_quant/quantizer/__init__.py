@@ -8,4 +8,12 @@ from .integer import fixed_point_quantizer, fixed_point_floor_quantizer
 # Re-export integer module for `from plena_quant.quantizer import integer` support
 from . import integer
 
-__all__ = ["_minifloat_ieee_quantize", "fixed_point_floor_quantizer", "fixed_point_quantizer", "integer", "minifloat_ieee_quantizer", "mx_int_quantizer", "mxfp_quantizer"]
+__all__ = [
+    "_minifloat_ieee_quantize",
+    "fixed_point_floor_quantizer",
+    "fixed_point_quantizer",
+    "integer",
+    "minifloat_ieee_quantizer",
+    "mx_int_quantizer",
+    "mxfp_quantizer",
+]

@@ -49,15 +49,15 @@ def fp_to_float(
         if man == 0:
             return 0.0
         # Subnormal: implicit leading 0
-        val = (man / (2 ** man_width)) * (2 ** (1 - bias))
+        val = (man / (2**man_width)) * (2 ** (1 - bias))
     elif exp == (1 << exp_width) - 1:
         # Inf/NaN
         if man == 0:
-            return float('-inf') if sign else float('inf')
-        return float('nan')
+            return float("-inf") if sign else float("inf")
+        return float("nan")
     else:
         # Normal: implicit leading 1
-        val = (1 + man / (2 ** man_width)) * (2 ** (exp - bias))
+        val = (1 + man / (2**man_width)) * (2 ** (exp - bias))
 
     return -val if sign else val
 
@@ -221,7 +221,7 @@ def view_vector_result_as_fp(
     # Write to output file if specified
     if output_file:
         output_path = Path(output_file)
-        with open(output_path, 'w') as f:
+        with open(output_path, "w") as f:
             f.write("# Vector Result FP Values\n")
             f.write(f"# File: {filepath}\n")
             f.write(f"# VLEN: {vlen}, FP Format: {fp_format}\n")
@@ -250,16 +250,16 @@ def view_vector_result_as_fp(
         print("-" * 70)
 
     return {
-        'fp_values': fp_values,
-        'flat_values': flat_values,
-        'num_rows': end_row - start_row,
-        'vlen': vlen,
-        'exp_width': exp_width,
-        'man_width': man_width,
-        'fp_format': fp_format,
-        'row_width_bits': row_width_bits,
-        'start_row': start_row,
-        'end_row': end_row,
+        "fp_values": fp_values,
+        "flat_values": flat_values,
+        "num_rows": end_row - start_row,
+        "vlen": vlen,
+        "exp_width": exp_width,
+        "man_width": man_width,
+        "fp_format": fp_format,
+        "row_width_bits": row_width_bits,
+        "start_row": start_row,
+        "end_row": end_row,
     }
 
 
@@ -344,7 +344,7 @@ def view_vector_result_as_binary(
     print(f"  VLEN: {vlen}, FP{element_width} (1s + {exp_width}e + {man_width}m), bias={bias}")
     print(f"  Rows: {start_row} to {end_row - 1}")
     print("=" * 90)
-    print(f"{'Row':>6} {'Elem':>4} {'Sign':>4} {'Exp':>{exp_width+2}} {'Mant':>{man_width+2}} {'Value':>12}")
+    print(f"{'Row':>6} {'Elem':>4} {'Sign':>4} {'Exp':>{exp_width + 2}} {'Mant':>{man_width + 2}} {'Value':>12}")
     print("-" * 90)
 
     for row_idx in range(start_row, end_row):
@@ -367,62 +367,27 @@ def view_vector_result_as_binary(
             else:
                 val_str = f"{fp_val:.6f}"
 
-            print(f"{row_idx:>6} {i:>4} {sign_str:>4} {exp_str:>{exp_width+2}} {man_str:>{man_width+2}} {val_str:>12}")
+            print(
+                f"{row_idx:>6} {i:>4} {sign_str:>4} {exp_str:>{exp_width + 2}} {man_str:>{man_width + 2}} {val_str:>12}"
+            )
         print("-" * 90)
 
 
 def main():
     """Main entry point for command line usage."""
-    parser = argparse.ArgumentParser(
-        description="View vector_result.mem files with FP conversion"
-    )
-    parser.add_argument(
-        "--file", "-f",
-        type=str,
-        required=True,
-        help="Path to vector_result.mem file"
-    )
-    parser.add_argument(
-        "--vlen",
-        type=int,
-        default=16,
-        help="Number of elements per row (VLEN, default: 16)"
-    )
-    parser.add_argument(
-        "--exp-width",
-        type=int,
-        default=6,
-        help="Exponent width (V_FP_EXP_WIDTH, default: 6)"
-    )
-    parser.add_argument(
-        "--man-width",
-        type=int,
-        default=5,
-        help="Mantissa width (V_FP_MANT_WIDTH, default: 5)"
-    )
-    parser.add_argument(
-        "--start-row",
-        type=int,
-        default=0,
-        help="Starting row index (default: 0)"
-    )
-    parser.add_argument(
-        "--num-rows",
-        type=int,
-        default=None,
-        help="Number of rows to display (default: all)"
-    )
-    parser.add_argument(
-        "--output", "-o",
-        type=str,
-        default=None,
-        help="Output file path for FP values"
-    )
+    parser = argparse.ArgumentParser(description="View vector_result.mem files with FP conversion")
+    parser.add_argument("--file", "-f", type=str, required=True, help="Path to vector_result.mem file")
+    parser.add_argument("--vlen", type=int, default=16, help="Number of elements per row (VLEN, default: 16)")
+    parser.add_argument("--exp-width", type=int, default=6, help="Exponent width (V_FP_EXP_WIDTH, default: 6)")
+    parser.add_argument("--man-width", type=int, default=5, help="Mantissa width (V_FP_MANT_WIDTH, default: 5)")
+    parser.add_argument("--start-row", type=int, default=0, help="Starting row index (default: 0)")
+    parser.add_argument("--num-rows", type=int, default=None, help="Number of rows to display (default: all)")
+    parser.add_argument("--output", "-o", type=str, default=None, help="Output file path for FP values")
     parser.add_argument(
         "--mode",
         choices=["fp", "hex", "binary"],
         default="fp",
-        help="Display mode: fp (floating point), hex, or binary (default: fp)"
+        help="Display mode: fp (floating point), hex, or binary (default: fp)",
     )
 
     args = parser.parse_args()

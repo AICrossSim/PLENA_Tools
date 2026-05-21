@@ -12,26 +12,18 @@ logger.setLevel(logging.DEBUG)
 
 class MemoryDataManager:
     """Manages memory data from pt files, supporting multiple mx and int entries."""
+
     def __init__(self):
         self.mx_entries = []  # Can have multiple mx entries
         self.int_entries = []  # Can have multiple int entries
 
     def add_mx_file(self, filename, blocks, bias):
         """Add an mx type data entry."""
-        self.mx_entries.append({
-            "filename": filename,
-            "type": "mx",
-            "blocks": blocks,
-            "bias": bias
-        })
+        self.mx_entries.append({"filename": filename, "type": "mx", "blocks": blocks, "bias": bias})
 
     def add_int_file(self, filename, data):
         """Add an int type data entry."""
-        self.int_entries.append({
-            "filename": filename,
-            "type": "int",
-            "data": data
-        })
+        self.int_entries.append({"filename": filename, "type": "int", "data": data})
 
     def get_all_entries(self):
         """Get all entries as a list for iteration."""
@@ -46,20 +38,16 @@ class MemoryDataManager:
         if self.mx_entries:
             result["mx"] = {
                 "blocks": [entry["blocks"] for entry in self.mx_entries],
-                "bias": [entry["bias"] for entry in self.mx_entries]
+                "bias": [entry["bias"] for entry in self.mx_entries],
             }
         if self.int_entries:
             # For backward compatibility, use "normal" key
             # If multiple int entries, combine them or use the last one
             if len(self.int_entries) == 1:
-                result["normal"] = {
-                    "data": self.int_entries[0]["data"]
-                }
+                result["normal"] = {"data": self.int_entries[0]["data"]}
             else:
                 # If multiple int entries, use the last one (or could combine)
-                result["normal"] = {
-                    "data": self.int_entries[-1]["data"]
-                }
+                result["normal"] = {"data": self.int_entries[-1]["data"]}
         return result
 
 
@@ -133,7 +121,9 @@ def create_mem_for_sim(
             "skip_first_dim": False,
             "format": "mxint",
         }
-        logger.info(f"Using MXINT format: element_width={mxint_width}, scale_width={precision_settings['scale_exp_width']}")
+        logger.info(
+            f"Using MXINT format: element_width={mxint_width}, scale_width={precision_settings['scale_exp_width']}"
+        )
     else:
         # MXFP quantization config
         quant_config = {
@@ -146,7 +136,9 @@ def create_mem_for_sim(
             "format": "mxfp",
         }
         element_width = precision_settings["exp_width"] + precision_settings["man_width"] + 1
-        logger.info(f"Using MXFP format: element_width={element_width}, scale_width={precision_settings['scale_exp_width']}")
+        logger.info(
+            f"Using MXFP format: element_width={element_width}, scale_width={precision_settings['scale_exp_width']}"
+        )
 
     # then load and quantize all of them. Collect the results in a MemoryDataManager.
     if build_path is not None:
@@ -183,4 +175,11 @@ def create_mem_for_sim(
             int_data = torch.load(pt_file)
             memory_data_manager.add_int_file(pt_file.name, int_data)
 
-    env_setup(memory_data_manager, asm_file.parent, data_config, quant_config, hbm_row_width=hbm_row_width, instr_storage_offset=instr_storage_offset)
+    env_setup(
+        memory_data_manager,
+        asm_file.parent,
+        data_config,
+        quant_config,
+        hbm_row_width=hbm_row_width,
+        instr_storage_offset=instr_storage_offset,
+    )

@@ -76,10 +76,10 @@ def read_instructions_from_mem(mem_file_path: Path) -> list:
         for line in f:
             line = line.strip()
             # Skip empty lines and comments
-            if not line or line.startswith('//') or line.startswith('#'):
+            if not line or line.startswith("//") or line.startswith("#"):
                 continue
             # Parse hex value (format: 0xDEADBEEF or just DEADBEEF)
-            if line.startswith('0x') or line.startswith('0X'):
+            if line.startswith("0x") or line.startswith("0X"):
                 try:
                     instructions.append(int(line, 16))
                 except ValueError:
@@ -87,7 +87,15 @@ def read_instructions_from_mem(mem_file_path: Path) -> list:
     return instructions
 
 
-def env_setup(memory_data_manager, build_path: str, data_config, quant_config, hbm_row_width=256, test_file_name=None, instr_storage_offset=None):
+def env_setup(
+    memory_data_manager,
+    build_path: str,
+    data_config,
+    quant_config,
+    hbm_row_width=256,
+    test_file_name=None,
+    instr_storage_offset=None,
+):
     """
     Setup environment for simulation using MemoryDataManager.
     Generates a single hbm.mem file with interleaved element and scale data per tensor.
@@ -106,8 +114,8 @@ def env_setup(memory_data_manager, build_path: str, data_config, quant_config, h
             INSTRUCTION_STORAGE_OFFSET (8192). Pass "auto" or -1 to automatically
             calculate offset to place instructions right after data.
     """
-    isa_file_path = PROJECT_PATH / 'PLENA_Compiler' / 'doc' / 'operation.svh'
-    config_file_path = PROJECT_PATH / 'PLENA_Compiler' / 'doc' / 'configuration.svh'
+    isa_file_path = PROJECT_PATH / "PLENA_Compiler" / "doc" / "operation.svh"
+    config_file_path = PROJECT_PATH / "PLENA_Compiler" / "doc" / "configuration.svh"
 
     # Determine instruction file path
     if test_file_name is None:
@@ -115,9 +123,9 @@ def env_setup(memory_data_manager, build_path: str, data_config, quant_config, h
         assembler = AssemblyToBinary(str(isa_file_path), str(config_file_path))
         assembler.generate_binary(build_path / "generated_asm_code.asm", instr_file)
     else:
-        instr_file = build_path / f'{test_file_name}.mem'
+        instr_file = build_path / f"{test_file_name}.mem"
         assembler = AssemblyToBinary(str(isa_file_path), str(config_file_path))
-        assembler.generate_binary(build_path / f'{test_file_name}.asm', instr_file)
+        assembler.generate_binary(build_path / f"{test_file_name}.asm", instr_file)
 
     # Read instructions from the generated .mem file
     instructions = read_instructions_from_mem(instr_file)
@@ -148,9 +156,7 @@ def env_setup(memory_data_manager, build_path: str, data_config, quant_config, h
 
     if instr_storage_offset == "auto" or instr_storage_offset == -1:
         # Calculate offset to place instructions right after data
-        final_offset = calculate_instr_offset_after_data(
-            tensor_data, element_width, bias_width, hbm_row_width
-        )
+        final_offset = calculate_instr_offset_after_data(tensor_data, element_width, bias_width, hbm_row_width)
     elif instr_storage_offset is None:
         # Use default constant
         final_offset = INSTRUCTION_STORAGE_OFFSET

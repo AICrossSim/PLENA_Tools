@@ -59,9 +59,9 @@ def read_hbm_elements_and_scales(
     num_elements: int,
     row_width: int = 256,  # HBM row width (256 bits)
     mx_element_width: int = 8,  # Width per MX element (8 bits for 4+3+1)
-    mx_scale_width: int = 8,    # Width per MX scale (8 bits)
-    block_size: int = 8,        # Elements per block
-    scale_offset: int | None = None,   # Byte offset from elements to scales
+    mx_scale_width: int = 8,  # Width per MX scale (8 bits)
+    block_size: int = 8,  # Elements per block
+    scale_offset: int | None = None,  # Byte offset from elements to scales
 ) -> tuple[np.ndarray, np.ndarray]:
     """Extract elements and scales from unified HBM data.
 
@@ -157,15 +157,15 @@ def mx_to_float(
             if man == 0:
                 elem_val = 0.0
             else:
-                elem_val = ((-1) ** int(sign)) * (man / (2 ** man_width)) * (2 ** (1 - bias))
+                elem_val = ((-1) ** int(sign)) * (man / (2**man_width)) * (2 ** (1 - bias))
         elif exp == (1 << exp_width) - 1:
             # Inf/NaN
-            elem_val = float('inf') if man == 0 else float('nan')
+            elem_val = float("inf") if man == 0 else float("nan")
             if sign:
                 elem_val = -elem_val
         else:
             # Normal
-            elem_val = ((-1) ** int(sign)) * (1 + man / (2 ** man_width)) * (2 ** (exp - bias))
+            elem_val = ((-1) ** int(sign)) * (1 + man / (2**man_width)) * (2 ** (exp - bias))
 
         # Apply scale (E8M0 format)
         scale_val = 2 ** (scale - scale_bias)
@@ -400,7 +400,8 @@ def verify_hbm(
     # Convert to float based on format
     if mx_format == "mxint":
         simulated_all = mxint_to_float(
-            elements, scales,
+            elements,
+            scales,
             int_width=int_width,
             scale_width=scale_width,
             block_size=block_size,
@@ -408,7 +409,8 @@ def verify_hbm(
         format_info = f"MXINT (int_width={int_width}, scale_width={scale_width})"
     else:
         simulated_all = mx_to_float(
-            elements, scales,
+            elements,
+            scales,
             exp_width=exp_width,
             man_width=man_width,
             scale_width=scale_width,
@@ -435,7 +437,9 @@ def verify_hbm(
     if verbose and (hbm_compare_start_row > 0 or hbm_compare_num_rows is not None):
         actual_rows = (end_elem_idx - start_elem_idx + hbm_elements_per_row - 1) // hbm_elements_per_row
         print("\nHBM Comparison Filter:")
-        print(f"  Comparing rows {hbm_compare_start_row} to {hbm_compare_start_row + actual_rows - 1} (of {hbm_total_rows} total)")
+        print(
+            f"  Comparing rows {hbm_compare_start_row} to {hbm_compare_start_row + actual_rows - 1} (of {hbm_total_rows} total)"
+        )
         print(f"  Elements {start_elem_idx} to {end_elem_idx - 1} (of {len(simulated_all)} total)")
 
     # Save translated FP values to file
@@ -445,7 +449,7 @@ def verify_hbm(
         hbm_row_elements = params.get("hbm_elements_per_row", 32)
         total_hbm_rows = (len(simulated_all) + hbm_row_elements - 1) // hbm_row_elements
 
-        with open(fp_output_file, 'w') as f:
+        with open(fp_output_file, "w") as f:
             f.write("# HBM Result - Translated to Floating Point\n")
             f.write(f"# Source: {hbm_result_file}\n")
             f.write(f"# Format: {format_info}\n")
@@ -472,7 +476,7 @@ def verify_hbm(
 
     # Apply same filtering to golden values
     if start_elem_idx > 0 or end_elem_idx < len(golden_all):
-        golden = golden_all[start_elem_idx:min(end_elem_idx, len(golden_all))]
+        golden = golden_all[start_elem_idx : min(end_elem_idx, len(golden_all))]
     else:
         golden = golden_all
 
@@ -549,7 +553,7 @@ def verify_hbm_rows(
     with open(hbm_result_file) as f:
         for line in f:
             line = line.strip()
-            if line.startswith('0x') or line.startswith('0X'):
+            if line.startswith("0x") or line.startswith("0X"):
                 hbm_rows.append(int(line, 16))
 
     # Get format parameters
@@ -610,7 +614,7 @@ def verify_hbm_rows(
                 normalized = magnitude / (1 << magnitude_bits)
                 # Use scale from data if available, otherwise default
                 scale_exp = 0  # Assume scale gives exp=0 for now
-                fp_val = normalized * (2 ** scale_exp)
+                fp_val = normalized * (2**scale_exp)
                 if sign:
                     fp_val = -fp_val
             else:
@@ -620,9 +624,9 @@ def verify_hbm_rows(
                 man = elem & ((1 << man_width) - 1)
                 bias = (1 << (exp_width - 1)) - 1
                 if exp == 0:
-                    fp_val = 0.0 if man == 0 else (man / (2 ** man_width)) * (2 ** (1 - bias))
+                    fp_val = 0.0 if man == 0 else (man / (2**man_width)) * (2 ** (1 - bias))
                 else:
-                    fp_val = (1 + man / (2 ** man_width)) * (2 ** (exp - bias))
+                    fp_val = (1 + man / (2**man_width)) * (2 ** (exp - bias))
                 if sign:
                     fp_val = -fp_val
 
@@ -750,15 +754,15 @@ def fp_to_float(
         if man == 0:
             return 0.0
         # Subnormal: implicit leading 0
-        val = (man / (2 ** man_width)) * (2 ** (1 - bias))
+        val = (man / (2**man_width)) * (2 ** (1 - bias))
     elif exp == (1 << exp_width) - 1:
         # Inf/NaN
         if man == 0:
-            return float('-inf') if sign else float('inf')
-        return float('nan')
+            return float("-inf") if sign else float("inf")
+        return float("nan")
     else:
         # Normal: implicit leading 1
-        val = (1 + man / (2 ** man_width)) * (2 ** (exp - bias))
+        val = (1 + man / (2**man_width)) * (2 ** (exp - bias))
 
     return -val if sign else val
 
@@ -845,7 +849,7 @@ def save_vector_result_as_fp(
     else:
         out_file = output_path.with_suffix(".fp.txt")
 
-    with open(out_file, 'w') as f:
+    with open(out_file, "w") as f:
         if format == "txt":
             # Human-readable format with header
             f.write("# Vector Result FP Values\n")
@@ -972,7 +976,9 @@ def verify_vram(
     if verbose and (vram_compare_start_row > 0 or vram_compare_num_rows is not None):
         actual_compare_rows = (compare_end_elem_idx - compare_start_elem_idx + vlen - 1) // vlen
         print("\nVRAM Comparison Filter:")
-        print(f"  Comparing rows {vram_compare_start_row} to {vram_compare_start_row + actual_compare_rows - 1} (of {vram_total_rows} total)")
+        print(
+            f"  Comparing rows {vram_compare_start_row} to {vram_compare_start_row + actual_compare_rows - 1} (of {vram_total_rows} total)"
+        )
         print(f"  Elements {compare_start_elem_idx} to {compare_end_elem_idx - 1} (of {len(simulated_all)} total)")
 
     # Save FP results to file if requested
@@ -982,7 +988,7 @@ def verify_vram(
         element_width = 1 + exp_width + man_width
         fp_format = f"FP{element_width} (1s + {exp_width}e + {man_width}m)"
 
-        with open(fp_output_file, 'w') as f:
+        with open(fp_output_file, "w") as f:
             f.write("# Vector Result FP Values\n")
             f.write(f"# Source: {vram_result_file}\n")
             f.write(f"# VLEN: {vlen}, Format: {fp_format}\n")
@@ -1003,7 +1009,7 @@ def verify_vram(
 
     # Apply same filtering to golden values
     if compare_start_elem_idx > 0 or compare_end_elem_idx < len(golden_all):
-        golden = golden_all[compare_start_elem_idx:min(compare_end_elem_idx, len(golden_all))]
+        golden = golden_all[compare_start_elem_idx : min(compare_end_elem_idx, len(golden_all))]
     else:
         golden = golden_all
 
@@ -1011,7 +1017,11 @@ def verify_vram(
     result = compare_results(simulated, golden)
     result["type"] = "vram"
     result["rows_checked"] = min(num_rows, len(vram_data) - start_row)
-    result["rows_compared"] = (compare_end_elem_idx - compare_start_elem_idx + vlen - 1) // vlen if vram_compare_num_rows else result["rows_checked"]
+    result["rows_compared"] = (
+        (compare_end_elem_idx - compare_start_elem_idx + vlen - 1) // vlen
+        if vram_compare_num_rows
+        else result["rows_checked"]
+    )
     result["fp_exp_width"] = exp_width
     result["fp_man_width"] = man_width
     result["vlen"] = vlen
@@ -1152,79 +1162,38 @@ def save_golden_vram(
 
 def main():
     """Main entry point for RTL simulation verification."""
-    parser = argparse.ArgumentParser(
-        description="Verify RTL simulation results against golden reference"
-    )
-    parser.add_argument(
-        "--workload-dir",
-        type=str,
-        required=True,
-        help="Path to workload build directory"
-    )
-    parser.add_argument(
-        "--verbose", "-v",
-        action="store_true",
-        help="Print detailed output"
-    )
-    parser.add_argument(
-        "--check-hbm",
-        action="store_true",
-        default=True,
-        help="Check HBM contents (default: True)"
-    )
-    parser.add_argument(
-        "--check-vram",
-        action="store_true",
-        default=False,
-        help="Check VRAM contents"
-    )
+    parser = argparse.ArgumentParser(description="Verify RTL simulation results against golden reference")
+    parser.add_argument("--workload-dir", type=str, required=True, help="Path to workload build directory")
+    parser.add_argument("--verbose", "-v", action="store_true", help="Print detailed output")
+    parser.add_argument("--check-hbm", action="store_true", default=True, help="Check HBM contents (default: True)")
+    parser.add_argument("--check-vram", action="store_true", default=False, help="Check VRAM contents")
     parser.add_argument(
         "--save-fp",
         action="store_true",
         default=True,
-        help="Save FP-converted VRAM results to .fp.txt file (default: True)"
+        help="Save FP-converted VRAM results to .fp.txt file (default: True)",
+    )
+    parser.add_argument("--no-save-fp", action="store_true", help="Disable saving FP-converted results")
+    parser.add_argument("--vlen", type=int, default=None, help="Override VLEN (elements per row)")
+    parser.add_argument(
+        "--exp-width", type=int, default=None, help="Override V_FP_EXP_WIDTH (default: from params or 6)"
     )
     parser.add_argument(
-        "--no-save-fp",
-        action="store_true",
-        help="Disable saving FP-converted results"
-    )
-    parser.add_argument(
-        "--vlen",
-        type=int,
-        default=None,
-        help="Override VLEN (elements per row)"
-    )
-    parser.add_argument(
-        "--exp-width",
-        type=int,
-        default=None,
-        help="Override V_FP_EXP_WIDTH (default: from params or 6)"
-    )
-    parser.add_argument(
-        "--man-width",
-        type=int,
-        default=None,
-        help="Override V_FP_MANT_WIDTH (default: from params or 5)"
+        "--man-width", type=int, default=None, help="Override V_FP_MANT_WIDTH (default: from params or 5)"
     )
     parser.add_argument(
         "--check-rows",
         type=str,
         default=None,
-        help="Check specific HBM rows (comma-separated, e.g., '0,1,2'). Uses row-based verification instead of full HBM check."
+        help="Check specific HBM rows (comma-separated, e.g., '0,1,2'). Uses row-based verification instead of full HBM check.",
     )
     parser.add_argument(
         "--expected",
         type=str,
         default="zeros",
-        help="Expected values for row check: 'zeros' (default) or comma-separated floats"
+        help="Expected values for row check: 'zeros' (default) or comma-separated floats",
     )
-    parser.add_argument(
-        "--atol",
-        type=float,
-        default=0.01,
-        help="Absolute tolerance for comparison (default: 0.01)"
-    )
+    parser.add_argument("--atol", type=float, default=0.01, help="Absolute tolerance for comparison (default: 0.01)")
     args = parser.parse_args()
 
     workload_dir = Path(args.workload_dir)
@@ -1254,9 +1223,11 @@ def main():
         print(f"Verification parameters loaded from: {params_file}")
         print(f"Workload type: {params.get('workload_type', 'unknown')}")
         if args.exp_width or args.man_width or args.vlen:
-            print(f"Overrides: vlen={params.get('vlen')}, "
-                  f"exp_width={params.get('v_fp_exp_width')}, "
-                  f"man_width={params.get('v_fp_man_width')}")
+            print(
+                f"Overrides: vlen={params.get('vlen')}, "
+                f"exp_width={params.get('v_fp_exp_width')}, "
+                f"man_width={params.get('v_fp_man_width')}"
+            )
 
     results = {}
     all_passed = True
@@ -1265,23 +1236,24 @@ def main():
     # HBM verification
     if args.check_rows:
         # Row-based verification (configurable)
-        rows_to_check = [int(r.strip()) for r in args.check_rows.split(',')]
+        rows_to_check = [int(r.strip()) for r in args.check_rows.split(",")]
 
         # Parse expected values
         if args.expected == "zeros":
             expected_values = "zeros"
         else:
             try:
-                expected_values = [float(v.strip()) for v in args.expected.split(',')]
+                expected_values = [float(v.strip()) for v in args.expected.split(",")]
             except ValueError:
                 expected_values = "zeros"
 
         hbm_result = verify_hbm_rows(
-            workload_dir, params,
+            workload_dir,
+            params,
             rows_to_check=rows_to_check,
             expected_values=expected_values,
             verbose=args.verbose,
-            atol=args.atol
+            atol=args.atol,
         )
         results["hbm_rows"] = hbm_result
         if hbm_result.get("error") or not hbm_result.get("passed", False):
@@ -1296,11 +1268,7 @@ def main():
 
     # VRAM verification
     if args.check_vram or params.get("check_vram", False):
-        vram_result = verify_vram(
-            workload_dir, params,
-            verbose=args.verbose,
-            save_fp_result=save_fp
-        )
+        vram_result = verify_vram(workload_dir, params, verbose=args.verbose, save_fp_result=save_fp)
         results["vram"] = vram_result
         if vram_result.get("error") or not vram_result.get("passed", False):
             all_passed = False

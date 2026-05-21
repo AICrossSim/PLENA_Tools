@@ -22,7 +22,7 @@ def parse_hbm_mem_file(filepath: Path) -> list[int]:
     with open(filepath) as f:
         for line in f:
             line = line.strip()
-            if line.startswith('0x') or line.startswith('0X'):
+            if line.startswith("0x") or line.startswith("0X"):
                 rows.append(int(line, 16))
     return rows
 
@@ -138,13 +138,13 @@ def mxfp_to_float(
             if man == 0:
                 elem_val = 0.0
             else:
-                elem_val = ((-1) ** sign) * (man / (2 ** man_width)) * (2 ** (1 - bias))
+                elem_val = ((-1) ** sign) * (man / (2**man_width)) * (2 ** (1 - bias))
         elif exp == (1 << exp_width) - 1:
-            elem_val = float('inf') if man == 0 else float('nan')
+            elem_val = float("inf") if man == 0 else float("nan")
             if sign:
                 elem_val = -elem_val
         else:
-            elem_val = ((-1) ** sign) * (1 + man / (2 ** man_width)) * (2 ** (exp - bias))
+            elem_val = ((-1) ** sign) * (1 + man / (2**man_width)) * (2 ** (exp - bias))
 
         scale_val = 2 ** (scale - scale_bias)
         values.append(elem_val * scale_val)
@@ -154,9 +154,9 @@ def mxfp_to_float(
 
 def print_tensor_info(name: str, tensor: torch.Tensor, num_per_row: int = 8):
     """Print tensor information and values."""
-    print(f"\n{'='*70}")
+    print(f"\n{'=' * 70}")
     print(f"{name}")
-    print(f"{'='*70}")
+    print(f"{'=' * 70}")
     print(f"Shape: {list(tensor.shape)}")
     print(f"Dtype: {tensor.dtype}")
 
@@ -167,7 +167,7 @@ def print_tensor_info(name: str, tensor: torch.Tensor, num_per_row: int = 8):
 
     print("\nFirst 64 values:")
     for i in range(0, min(64, len(flat)), num_per_row):
-        vals = flat[i:i+num_per_row].tolist()
+        vals = flat[i : i + num_per_row].tolist()
         idx_str = f"[{i:4d}]"
         val_str = " ".join(f"{v:10.4f}" for v in vals)
         print(f"  {idx_str} {val_str}")
@@ -182,9 +182,9 @@ def print_mx_data(
     num_blocks_to_show: int = 8,
 ):
     """Print MX format data with raw values and converted FP."""
-    print(f"\n{'='*70}")
+    print(f"\n{'=' * 70}")
     print(f"{name}")
-    print(f"{'='*70}")
+    print(f"{'=' * 70}")
     print(f"Total elements: {len(elements)}")
     print(f"Total scales: {len(scales)}")
     print(f"Block size: {block_size}")
@@ -209,7 +209,7 @@ def print_mx_data(
 
     print("\nConverted FP values (first 64):")
     for i in range(0, min(64, len(fp_values)), 8):
-        vals = fp_values[i:i+8]
+        vals = fp_values[i : i + 8]
         idx_str = f"[{i:4d}]"
         val_str = " ".join(f"{v:10.4f}" for v in vals)
         print(f"  {idx_str} {val_str}")
@@ -217,10 +217,8 @@ def print_mx_data(
 
 def main():
     parser = argparse.ArgumentParser(description="View HBM data in floating point format")
-    parser.add_argument("--workload-dir", "-w", type=str, required=True,
-                        help="Path to workload build directory")
-    parser.add_argument("--num-blocks", "-n", type=int, default=8,
-                        help="Number of blocks to show in detail")
+    parser.add_argument("--workload-dir", "-w", type=str, required=True, help="Path to workload build directory")
+    parser.add_argument("--num-blocks", "-n", type=int, default=8, help="Number of blocks to show in detail")
     args = parser.parse_args()
 
     workload_dir = Path(args.workload_dir)
@@ -272,20 +270,31 @@ def main():
     if hbm_init_file.exists():
         rows = parse_hbm_mem_file(hbm_init_file)
         elements, scales = extract_mx_data(
-            rows, start_row=0, num_elements=num_elements,
-            element_width=element_width, scale_width=scale_width, block_size=block_size
+            rows,
+            start_row=0,
+            num_elements=num_elements,
+            element_width=element_width,
+            scale_width=scale_width,
+            block_size=block_size,
         )
 
         if mx_format == "mxint":
-            fp_values = mxint_to_float(elements, scales, int_width=element_width,
-                                       scale_width=scale_width, block_size=block_size)
+            fp_values = mxint_to_float(
+                elements, scales, int_width=element_width, scale_width=scale_width, block_size=block_size
+            )
         else:
-            fp_values = mxfp_to_float(elements, scales, exp_width=exp_width,
-                                      man_width=man_width, scale_width=scale_width,
-                                      block_size=block_size)
+            fp_values = mxfp_to_float(
+                elements,
+                scales,
+                exp_width=exp_width,
+                man_width=man_width,
+                scale_width=scale_width,
+                block_size=block_size,
+            )
 
-        print_mx_data("INITIAL HBM (hbm.mem) - Activation Region",
-                      elements, scales, fp_values, block_size, args.num_blocks)
+        print_mx_data(
+            "INITIAL HBM (hbm.mem) - Activation Region", elements, scales, fp_values, block_size, args.num_blocks
+        )
 
     # =========================================================================
     # 3. Print result HBM (hbm_result.mem) converted to FP
@@ -294,20 +303,31 @@ def main():
     if hbm_result_file.exists():
         rows = parse_hbm_mem_file(hbm_result_file)
         elements, scales = extract_mx_data(
-            rows, start_row=0, num_elements=num_elements,
-            element_width=element_width, scale_width=scale_width, block_size=block_size
+            rows,
+            start_row=0,
+            num_elements=num_elements,
+            element_width=element_width,
+            scale_width=scale_width,
+            block_size=block_size,
         )
 
         if mx_format == "mxint":
-            fp_values = mxint_to_float(elements, scales, int_width=element_width,
-                                       scale_width=scale_width, block_size=block_size)
+            fp_values = mxint_to_float(
+                elements, scales, int_width=element_width, scale_width=scale_width, block_size=block_size
+            )
         else:
-            fp_values = mxfp_to_float(elements, scales, exp_width=exp_width,
-                                      man_width=man_width, scale_width=scale_width,
-                                      block_size=block_size)
+            fp_values = mxfp_to_float(
+                elements,
+                scales,
+                exp_width=exp_width,
+                man_width=man_width,
+                scale_width=scale_width,
+                block_size=block_size,
+            )
 
-        print_mx_data("RESULT HBM (hbm_result.mem) - After Simulation",
-                      elements, scales, fp_values, block_size, args.num_blocks)
+        print_mx_data(
+            "RESULT HBM (hbm_result.mem) - After Simulation", elements, scales, fp_values, block_size, args.num_blocks
+        )
 
     # =========================================================================
     # 4. Print golden result
@@ -320,9 +340,9 @@ def main():
     # =========================================================================
     # 5. Summary comparison
     # =========================================================================
-    print(f"\n{'='*70}")
+    print(f"\n{'=' * 70}")
     print("SUMMARY")
-    print(f"{'='*70}")
+    print(f"{'=' * 70}")
 
     if hbm_init_file.exists() and hbm_result_file.exists():
         init_rows = parse_hbm_mem_file(hbm_init_file)

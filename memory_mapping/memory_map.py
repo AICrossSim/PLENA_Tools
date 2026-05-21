@@ -18,7 +18,7 @@ def _map_block_to_hex(block: list[int], element_width: int) -> str:
         raise ValueError("element_width must be a multiple of 4")
     hex_digits = element_width // 4
     # Reverse the block so element[0] ends up at LSB (rightmost in hex string)
-    return ''.join(f"{element:0{hex_digits}X}" for element in reversed(block))
+    return "".join(f"{element:0{hex_digits}X}" for element in reversed(block))
 
 
 def _map_scale_to_hex(scale: int, scale_width: int) -> str:
@@ -32,10 +32,10 @@ def _map_scale_to_hex(scale: int, scale_width: int) -> str:
 def _hex_to_bytes(hex_str: str) -> bytes:
     """Convert hex string to bytes."""
     hex_str = hex_str.strip()
-    if hex_str.startswith('0x'):
+    if hex_str.startswith("0x"):
         hex_str = hex_str[2:]
     if len(hex_str) % 2 != 0:
-        hex_str = '0' + hex_str
+        hex_str = "0" + hex_str
     return bytes.fromhex(hex_str)
 
 
@@ -73,7 +73,17 @@ def generate_hbm(
         Path to the generated file
     """
     if mode == "rtl":
-        return _generate_hbm_mem(blocks, bias, element_width, bias_width, directory, hbm_row_width, instructions, instr_storage_offset, tensor_data)
+        return _generate_hbm_mem(
+            blocks,
+            bias,
+            element_width,
+            bias_width,
+            directory,
+            hbm_row_width,
+            instructions,
+            instr_storage_offset,
+            tensor_data,
+        )
     elif mode == "sim":
         return _generate_hbm_bin(blocks, bias, element_width, bias_width, directory, hbm_row_width, tensor_data)
     else:
@@ -225,7 +235,7 @@ def _build_blocks_bytes(blocks, element_width, bytes_per_row):
             row_buffer = row_buffer[bytes_per_row:]
     if row_buffer:
         padding = bytes_per_row - len(row_buffer)
-        row_buffer.extend(b'\x00' * padding)
+        row_buffer.extend(b"\x00" * padding)
         data.extend(row_buffer)
     return data
 
@@ -253,7 +263,7 @@ def _build_scales_bytes(bias, bias_width, bytes_per_row):
             row_buffer = row_buffer[bytes_per_row:]
     if row_buffer:
         padding = bytes_per_row - len(row_buffer)
-        row_buffer.extend(b'\x00' * padding)
+        row_buffer.extend(b"\x00" * padding)
         data.extend(row_buffer)
     return data
 
@@ -284,7 +294,7 @@ def _generate_hbm_bin(
 
     bytes_per_row = hbm_row_width // 8
 
-    with open(output_file, 'wb') as f:
+    with open(output_file, "wb") as f:
         if tensor_data is not None:
             # Interleaved format: for each tensor, write elements then scales
             for tensor_blocks, tensor_bias in tensor_data:
@@ -298,7 +308,7 @@ def _generate_hbm_bin(
             scale_data = _build_scales_bytes(bias, bias_width, bytes_per_row)
             # Scale offset = 8 (header) + element data size
             scale_offset = 8 + len(element_data)
-            header = scale_offset.to_bytes(8, byteorder='little')
+            header = scale_offset.to_bytes(8, byteorder="little")
             f.write(header)
             f.write(element_data)
             f.write(scale_data)

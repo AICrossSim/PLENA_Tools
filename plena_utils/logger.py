@@ -2,6 +2,7 @@ import logging
 
 try:
     from colorlog import ColoredFormatter
+
     formatter = ColoredFormatter(
         "%(log_color)s%(levelname)-8s%(reset)s %(blue)s%(message)s",
         datefmt=None,
