@@ -7,9 +7,9 @@ from .minifloat import (
 from .utils import (
     block,
     unblock,
-    my_clamp,
-    my_round,
-    my_floor,
+    ste_clamp,
+    ste_round,
+    ste_floor,
     _infer_block_shape,
     _infer_padding_shape,
 )
@@ -26,8 +26,8 @@ __all__ = [
     "block",
     "fixed_point_cast",
     "hardware_round",
-    "my_clamp",
-    "my_floor",
-    "my_round",
+    "ste_clamp",
+    "ste_floor",
+    "ste_round",
     "unblock",
 ]

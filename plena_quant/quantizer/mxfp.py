@@ -4,7 +4,7 @@ import torch
 from torch import Tensor
 from torch.nn import functional as F
 
-from .utils import my_clamp
+from .utils import ste_clamp
 from .minifloat import _minifloat_ieee_quantize
 
 
@@ -55,7 +55,7 @@ def _mx_fp_quantize(
     px = px.reshape(-1, block_size[0] * block_size[1])
 
     per_block_max = px.abs().max(dim=-1, keepdim=True).values + 1e-9
-    per_block_exponent_bias = my_clamp(
+    per_block_exponent_bias = ste_clamp(
         torch.floor(torch.log2(per_block_max)), -(2 ** (exponent_bias_width - 1)), 2 ** (exponent_bias_width - 1) - 1
     )
 

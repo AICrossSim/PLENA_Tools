@@ -3,7 +3,7 @@
 import torch
 from torch import Tensor
 
-from .utils import my_clamp, my_round
+from .utils import ste_clamp, ste_round
 from .hardware_utils import hardware_round
 
 
@@ -51,15 +51,15 @@ def _minifloat_denorm_quantize_hardware(
     value = torch.abs(x)
     # ceiling ensures mantissa in the range of [0, 1)
     exponent = torch.ceil(torch.log2(value + 1e-9))
-    exponent = my_clamp(exponent, exponent_min, exponent_max)
+    exponent = ste_clamp(exponent, exponent_min, exponent_max)
 
     # divide value by clipped exponent. this ensures the simulated minifloat value is correct
     # when x is too large (minifloat will saturate) or too close to 0.
     mantissa = value / 2**exponent
     shift = 2**mantissa_bits
-    shifted_mantissa = my_round(mantissa * shift)
+    shifted_mantissa = ste_round(mantissa * shift)
     # clip the integer mantissa.
-    shifted_mantissa = my_clamp(shifted_mantissa, shifted_mantissa_min, shifted_mantissa_max)
+    shifted_mantissa = ste_clamp(shifted_mantissa, shifted_mantissa_min, shifted_mantissa_max)
     mantissa = shifted_mantissa / shift
     # fmt: off
     # this `is_close_to_0` helps the grad keeps 1 if input x is 0, or the zero-initialized value will be trapped in 0
@@ -111,7 +111,7 @@ def _minifloat_ieee_quantize_hardware(x: Tensor, width: int, exponent_width: int
     # clip the exponent before calculating mantissa
     exponent = torch.floor(torch.log2(value + 1e-9))
     overflow = exponent > exponent_max
-    exponent = my_clamp(exponent, exponent_min, exponent_max)
+    exponent = ste_clamp(exponent, exponent_min, exponent_max)
 
     mantissa = value / 2**exponent
 
@@ -123,8 +123,8 @@ def _minifloat_ieee_quantize_hardware(x: Tensor, width: int, exponent_width: int
         exponent_bias = torch.tensor([exponent_bias], dtype=exponent.dtype, device=exponent.device)
     is_normal = (~torch.isclose(exponent, -exponent_bias))
 
-    shifted_mantissa = is_normal*my_clamp(hardware_round((mantissa - 1)*shift), shifted_mantissa_min, shifted_mantissa_max) +\
-        (~is_normal)*my_clamp(hardware_round(mantissa*shift), shifted_mantissa_min, shifted_mantissa_max)
+    shifted_mantissa = is_normal*ste_clamp(hardware_round((mantissa - 1)*shift), shifted_mantissa_min, shifted_mantissa_max) +\
+        (~is_normal)*ste_clamp(hardware_round(mantissa*shift), shifted_mantissa_min, shifted_mantissa_max)
     shifted_mantissa[overflow] = shifted_mantissa_max
     mantissa = is_normal*(1.0+shifted_mantissa/shift) + (~is_normal)*(shifted_mantissa/shift)
     # this `is_close_to_0` helps the grad keeps 1 if input x is 0, or the zero-initialized value will be trapped in 0

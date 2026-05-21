@@ -3,7 +3,7 @@
 import torch
 from torch import Tensor
 
-from ..common.utils import block, my_clamp, unblock, my_round
+from ..common.utils import block, ste_clamp, unblock, ste_round
 
 
 def _mx_int_quantize_hardware(
@@ -58,11 +58,11 @@ def _mx_int_quantize_hardware(
     # exponent
     per_block_value = torch.abs(blocked_x) + 1e-9
     per_block_exponent = torch.ceil(torch.log2(per_block_max))
-    per_block_exponent = my_clamp(per_block_exponent, exponent_min, exponent_max)
+    per_block_exponent = ste_clamp(per_block_exponent, exponent_min, exponent_max)
     # mantissa
     per_block_mantissa = per_block_value / 2**per_block_exponent
     shift = 2**mantissa_bits
-    per_block_mantissa_integer = my_clamp(my_round(per_block_mantissa * shift), 0, mantissa_integer_max)
+    per_block_mantissa_integer = ste_clamp(ste_round(per_block_mantissa * shift), 0, mantissa_integer_max)
     per_block_mantissa = per_block_mantissa_integer / shift
 
     per_block_msfp = per_block_sign * (2**per_block_exponent) * per_block_mantissa

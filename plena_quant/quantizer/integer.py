@@ -6,7 +6,7 @@ from numpy import ndarray
 from torch import Tensor
 import torch
 
-from .utils import my_clamp, my_round, my_floor
+from .utils import ste_clamp, ste_round, ste_floor
 
 
 def _fixed_point_quantize(x: Tensor | ndarray, width: int, frac_width: int | None = None, is_signed: bool = True):
@@ -39,11 +39,11 @@ def _fixed_point_quantize(x: Tensor | ndarray, width: int, frac_width: int | Non
     scale = 2**frac_width
 
     if isinstance(x, (Tensor, ndarray)):
-        return my_clamp(my_round(x.mul(scale)), int_min, int_max).div(scale)
+        return ste_clamp(ste_round(x.mul(scale)), int_min, int_max).div(scale)
     elif isinstance(x, int):
         return x
     else:
-        return my_clamp(my_round(x * scale), int_min, int_max) / scale
+        return ste_clamp(ste_round(x * scale), int_min, int_max) / scale
 
 
 def _fixed_point_floor_quantize(x: Tensor | ndarray, width: int, frac_width: int | None = None, is_signed: bool = True):
@@ -76,11 +76,11 @@ def _fixed_point_floor_quantize(x: Tensor | ndarray, width: int, frac_width: int
     scale = 2**frac_width
 
     if isinstance(x, (Tensor, ndarray)):
-        return my_clamp(my_round(x.mul(scale)), int_min, int_max).div(scale)
+        return ste_clamp(ste_round(x.mul(scale)), int_min, int_max).div(scale)
     elif isinstance(x, int):
         return x
     else:
-        return my_clamp(my_round(x * scale), int_min, int_max) / scale
+        return ste_clamp(ste_round(x * scale), int_min, int_max) / scale
 
 
 def _integer_floor_quantize(x: Tensor, width: int, frac_width: int | None = None, is_signed: bool = True):
@@ -96,11 +96,11 @@ def _integer_floor_quantize(x: Tensor, width: int, frac_width: int | None = None
     scale = 2**frac_width
 
     if isinstance(x, (Tensor, ndarray)):
-        return my_clamp(my_floor(x.mul(scale)), int_min, int_max).div(scale)
+        return ste_clamp(ste_floor(x.mul(scale)), int_min, int_max).div(scale)
     elif isinstance(x, int):
         return x
     else:
-        return my_clamp(my_floor(x * scale), int_min, int_max) / scale
+        return ste_clamp(ste_floor(x * scale), int_min, int_max) / scale
 
 
 class IntegerQuantize(torch.autograd.Function):

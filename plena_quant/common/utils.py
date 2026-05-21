@@ -11,8 +11,12 @@ from torch.nn import functional as F
 logger = getLogger(__name__)
 
 
-# Forced torch gradient overrider
-class MyClamp(InplaceFunction):
+# Straight-through estimator (STE) ops: the forward pass applies the real
+# (non-differentiable) clamp/round/floor, while the backward pass passes the
+# gradient through unchanged (treats the op as identity). This keeps gradients
+# flowing for quantization-aware training, unlike torch.round/torch.floor which
+# have zero gradient almost everywhere.
+class STEClamp(InplaceFunction):
     @staticmethod
     def forward(ctx, input, min, max):
         return input.clamp(min=min, max=max)
@@ -23,7 +27,7 @@ class MyClamp(InplaceFunction):
         return grad_input, None, None
 
 
-class MyRound(InplaceFunction):
+class STERound(InplaceFunction):
     @staticmethod
     def forward(ctx, input):
         ctx.input = input
@@ -35,7 +39,7 @@ class MyRound(InplaceFunction):
         return grad_input
 
 
-class MyFloor(InplaceFunction):
+class STEFloor(InplaceFunction):
     @staticmethod
     def forward(ctx, input):
         ctx.input = input
@@ -47,9 +51,9 @@ class MyFloor(InplaceFunction):
         return grad_input
 
 
-my_clamp = MyClamp.apply
-my_round = MyRound.apply
-my_floor = MyFloor.apply
+ste_clamp = STEClamp.apply
+ste_round = STERound.apply
+ste_floor = STEFloor.apply
 
 # --------------------------------
 # Block and unblock
