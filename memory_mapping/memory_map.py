@@ -176,19 +176,30 @@ def _generate_hbm_mem(
     directory.mkdir(parents=True, exist_ok=True)
     output_file = directory / "hbm.mem"
 
+    bytes_per_row = hbm_row_width // 8
+    total_data_rows = 0
+
     with open(output_file, "w") as f:
         if tensor_data is not None:
             # Interleaved format: for each tensor, write elements then scales
             for tensor_blocks, tensor_bias in tensor_data:
-                _write_blocks_to_file(f, tensor_blocks, element_width, hbm_row_width)
-                _write_scales_to_file(f, tensor_bias, bias_width, hbm_row_width)
+                total_data_rows += _write_blocks_to_file(f, tensor_blocks, element_width, hbm_row_width)
+                total_data_rows += _write_scales_to_file(f, tensor_bias, bias_width, hbm_row_width)
         else:
             # Legacy format: all elements first, then all scales
-            _write_blocks_to_file(f, blocks, element_width, hbm_row_width)
-            _write_scales_to_file(f, bias, bias_width, hbm_row_width)
+            total_data_rows += _write_blocks_to_file(f, blocks, element_width, hbm_row_width)
+            total_data_rows += _write_scales_to_file(f, bias, bias_width, hbm_row_width)
 
         # Write instruction section (32-bit instructions packed into rows)
         if instructions:
+            # Pad with zeros to reach instr_storage_offset
+            data_bytes = total_data_rows * bytes_per_row
+            if instr_storage_offset is not None and data_bytes < instr_storage_offset:
+                pad_bytes = instr_storage_offset - data_bytes
+                pad_rows = pad_bytes // bytes_per_row
+                zero_row = "0" * (hbm_row_width // 4)  # hex chars per row
+                for _ in range(pad_rows):
+                    f.write(f"0x{zero_row}\n")
             instr_width = 32  # Each instruction is 32 bits
             num_instr_per_row = hbm_row_width // instr_width
             row_hex = ""

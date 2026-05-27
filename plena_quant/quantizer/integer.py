@@ -1,5 +1,7 @@
 """Integer/fixed-point quantization functions."""
 
+from __future__ import annotations
+
 from math import log2
 
 from numpy import ndarray

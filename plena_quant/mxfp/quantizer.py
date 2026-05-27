@@ -1,5 +1,7 @@
 """MXFP quantization functions."""
 
+from __future__ import annotations
+
 import torch
 from torch import Tensor
 from torch.nn import functional as F

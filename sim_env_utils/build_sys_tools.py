@@ -7,7 +7,8 @@ from assembler.assembly_to_binary import AssemblyToBinary
 # Derive project root: this file is at PLENA_Tools/sim_env_utils/build_sys_tools.py
 PROJECT_PATH = Path(__file__).resolve().parent.parent.parent
 
-# Default instruction storage offset (from configuration.svh)
+# Default instruction storage offset (from configuration.svh).
+# Workload generators override this dynamically via update_instruction_storage_offset().
 INSTRUCTION_STORAGE_OFFSET = 8192
 
 

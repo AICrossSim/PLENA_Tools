@@ -1,3 +1,4 @@
+from __future__ import annotations
 """Non-hardware MXFP quantization functions."""
 
 import torch

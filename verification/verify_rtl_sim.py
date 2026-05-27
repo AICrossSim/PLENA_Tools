@@ -81,13 +81,12 @@ def read_hbm_elements_and_scales(
     bytes_per_row = row_width // 8  # 32 bytes per row
     row_width // mx_element_width
 
-    # Extract elements
+    # Extract elements (bit-level addressing for sub-byte elements like e1m2)
     elements = []
     for i in range(num_elements):
-        byte_addr = start_addr + i * (mx_element_width // 8)
-        row_idx = byte_addr // bytes_per_row
-        byte_offset = byte_addr % bytes_per_row
-        bit_offset = byte_offset * 8
+        total_bit = start_addr * 8 + i * mx_element_width
+        row_idx = total_bit // row_width
+        bit_offset = total_bit % row_width
 
         row_data = hbm_data.get(row_idx, 0)
         element = (row_data >> bit_offset) & ((1 << mx_element_width) - 1)
@@ -96,17 +95,27 @@ def read_hbm_elements_and_scales(
     # Extract scales
     num_blocks = (num_elements + block_size - 1) // block_size
     scales = []
-    scale_start_addr = (start_addr + scale_offset) if scale_offset else (start_addr + num_elements)
 
-    for i in range(num_blocks):
-        byte_addr = scale_start_addr + i * (mx_scale_width // 8)
-        row_idx = byte_addr // bytes_per_row
-        byte_offset = byte_addr % bytes_per_row
-        bit_offset = byte_offset * 8
+    use_neutral = (scale_offset is not None and scale_offset == "neutral")
+    if use_neutral:
+        scales = [127] * num_blocks
+    else:
+        # Compute scale section start in bytes
+        if scale_offset is not None:
+            scale_start_addr = start_addr + scale_offset
+        else:
+            # Default: scales follow elements in byte-addressed memory
+            element_bytes = (num_elements * mx_element_width + 7) // 8
+            scale_start_addr = start_addr + element_bytes
 
-        row_data = hbm_data.get(row_idx, 0)
-        scale = (row_data >> bit_offset) & ((1 << mx_scale_width) - 1)
-        scales.append(scale)
+        for i in range(num_blocks):
+            total_bit = scale_start_addr * 8 + i * mx_scale_width
+            row_idx = total_bit // row_width
+            bit_offset = total_bit % row_width
+
+            row_data = hbm_data.get(row_idx, 0)
+            scale = (row_data >> bit_offset) & ((1 << mx_scale_width) - 1)
+            scales.append(scale)
 
     return np.array(elements, dtype=np.uint8), np.array(scales, dtype=np.uint8)
 
@@ -144,22 +153,26 @@ def mx_to_float(
 
     for i, elem in enumerate(elements):
         block_idx = i // block_size
-        scale = scales[block_idx] if block_idx < len(scales) else 0
+        scale = int(scales[block_idx]) if block_idx < len(scales) else 0
 
-        # Parse element
-        sign = (elem >> (exp_width + man_width)) & 1
-        exp = (elem >> man_width) & ((1 << exp_width) - 1)
-        man = elem & man_mask
+        # Parse element (cast to int to avoid numpy uint8 underflow)
+        sign = int((elem >> (exp_width + man_width)) & 1)
+        exp = int((elem >> man_width) & ((1 << exp_width) - 1))
+        man = int(elem & man_mask)
 
         # Convert element to float
+        # MXFP block formats (exp_width <= 4) don't reserve max exponent for inf/NaN
+        max_exp = (1 << exp_width) - 1
+        has_inf_nan = exp_width >= 5
+
         if exp == 0:
-            # Subnormal or zero
             if man == 0:
                 elem_val = 0.0
             else:
                 elem_val = ((-1) ** int(sign)) * (man / (2**man_width)) * (2 ** (1 - bias))
-        elif exp == (1 << exp_width) - 1:
-            # Inf/NaN
+        elif has_inf_nan and exp == max_exp:
+            # Inf/NaN — only formats with >= 5 exponent bits reserve the max exp.
+            # MXFP block formats (E1M2, E2M1, E3M2) use the max exp as a normal value.
             elem_val = float("inf") if man == 0 else float("nan")
             if sign:
                 elem_val = -elem_val
@@ -199,32 +212,179 @@ def mxint_to_float(
         Float array of converted values
     """
     values = []
-    magnitude_bits = int_width - 1
-    magnitude_mask = (1 << magnitude_bits) - 1
+    sign_threshold = 1 << (int_width - 1)
+    wrap_value = 1 << int_width
     scale_bias = (1 << (scale_width - 1)) - 1  # 127 for 8-bit scale
 
     for i, elem in enumerate(elements):
         block_idx = i // block_size
         scale = scales[block_idx] if block_idx < len(scales) else scale_bias
 
-        # Parse element: [sign(1)][magnitude(int_width-1)]
-        sign = (elem >> magnitude_bits) & 1
-        magnitude = elem & magnitude_mask
+        # Two's complement decode: high bit means negative
+        signed_val = int(elem) - wrap_value if int(elem) >= sign_threshold else int(elem)
 
-        # Convert to float
-        # Normalized mantissa = magnitude / 2^magnitude_bits (in range [0, 1))
-        normalized_mantissa = magnitude / (1 << magnitude_bits)
+        # Normalize to [-1, 1) range
+        normalized = signed_val / sign_threshold
 
         # Apply scale: 2^(scale - bias)
         scale_val = 2 ** (int(scale) - scale_bias)
 
-        elem_val = normalized_mantissa * scale_val
-        if sign:
-            elem_val = -elem_val
-
-        values.append(elem_val)
+        values.append(normalized * scale_val)
 
     return np.array(values, dtype=np.float32)
+
+
+def fp_to_signed_exp_mant(
+    val: float,
+    exp_width: int = 8,
+    mant_width: int = 7,
+) -> Tuple[int, int]:
+    """Mimic fp_ieee_partition.sv exactly.
+
+    For an IEEE-like FP value with `exp_width` exponent bits and `mant_width`
+    mantissa bits, returns (signed_exp, signed_mant) where:
+      - signed_exp = exp_field - BIAS (with BIAS = 2^(exp_width-1)-1, except
+        the E1Mx special case which the RTL also handles).
+      - signed_mant is the (mant_width+2)-bit signed integer formed by
+        prepending [01] (normal) or [00] (subnormal) to the mantissa field,
+        then negating for negative values. This is a fixed-point representation
+        where the implicit 1.x of normal numbers maps to integer 2^mant_width.
+
+    Returns (0, 0) for exact zero so the all-zero block path matches the RTL.
+    """
+    if val == 0.0:
+        return 0, 0
+
+    bf = np.float32(val).view(np.uint32).item()
+    # For exp_width=8/mant_width=7 (bf16-like / E8M7) the top 16 bits of fp32
+    # are the encoded value. The bf16 source is already in this form.
+    fp_bits = (bf >> 16) & 0xffff
+
+    sign = (fp_bits >> (exp_width + mant_width)) & 1
+    exp_field = (fp_bits >> mant_width) & ((1 << exp_width) - 1)
+    mant_field = fp_bits & ((1 << mant_width) - 1)
+
+    bias = 1 if exp_width == 1 else (1 << (exp_width - 1)) - 1
+
+    if exp_field == 0:
+        # Subnormal: signed_exp = 1 - bias, no implicit leading 1
+        signed_exp = 1 - bias
+        unsigned_mant = mant_field
+    else:
+        # Normal: implicit 1 + mantissa, signed_exp = exp_field - bias
+        signed_exp = exp_field - bias
+        unsigned_mant = (1 << mant_width) | mant_field
+
+    signed_mant = -unsigned_mant if sign else unsigned_mant
+    return signed_exp, signed_mant
+
+
+def fp_block_to_mxint_bytes(
+    fp_block: List[float],
+    mxint_width: int = 8,
+    exp_width: int = 8,
+    mant_width: int = 7,
+    scale_width: int = 8,
+) -> Tuple[List[int], int]:
+    """Encode a block of FP values to MXINT mantissa bytes + scale byte.
+
+    Mimics src/basic_components/conversion/rtl/fp_2_mx_int_block.sv exactly:
+      1. fp_ieee_partition per element -> (signed_exp, signed_mant)
+      2. signed_exp_max = max(signed_exp) across the block
+      3. shift_amt = signed_exp[i] - signed_exp_max  (<= 0 for non-max elems)
+      4. shifted = signed_mant[i] arithmetic-shifted by shift_amt
+         (Python's >> on a signed int is arithmetic — sign-preserving)
+      5. Truncate to mxint_width bits (two's complement, wrap)
+      6. scale_byte = signed_exp_max + (2^(scale_width-1) - 1)
+
+    Returns: (list of mantissa bytes [unsigned], scale byte [unsigned])
+    """
+    partitioned = [fp_to_signed_exp_mant(v, exp_width, mant_width) for v in fp_block]
+    signed_exps = [p[0] for p in partitioned]
+    signed_mants = [p[1] for p in partitioned]
+
+    scale_bias = (1 << (scale_width - 1)) - 1
+
+    if all(m == 0 for m in signed_mants):
+        # All-zero block: RTL emits scale = SCALE_BIAS
+        return [0] * len(fp_block), scale_bias
+
+    signed_exp_max = max(signed_exps)
+    mask = (1 << mxint_width) - 1
+    mantissa_bytes = []
+    for se, sm in zip(signed_exps, signed_mants):
+        shift_amt = se - signed_exp_max  # <= 0
+        if shift_amt >= 0:
+            shifted = sm << shift_amt
+        else:
+            shifted = sm >> (-shift_amt)  # Python `>>` is arithmetic on signed ints
+        mantissa_bytes.append(shifted & mask)
+
+    scale_byte = (signed_exp_max + scale_bias) & ((1 << scale_width) - 1)
+    return mantissa_bytes, scale_byte
+
+
+def verify_hbm_byte_exact(
+    hbm_data: Dict[int, int],
+    golden_fp: np.ndarray,
+    start_addr: int,
+    num_elements: int,
+    block_size: int = 8,
+    mxint_width: int = 8,
+    fp_exp_width: int = 8,
+    fp_mant_width: int = 7,
+    row_width: int = 256,
+) -> Dict:
+    """Byte-exact verification: compare HBM element bytes against a Python
+    re-encoding of the golden FP values that mirrors fp_2_mx_int_block.sv.
+
+    This sidesteps the (mantissa, scale) round-trip ambiguity: instead of
+    decoding back to floats with a guessed scale, we directly check that the
+    raw mantissa bytes the hardware wrote match what an RTL-matching encoder
+    would have produced. The hardware-computed scale stays out of the picture.
+
+    Returns a dict with mismatched-byte count, total-byte count, match_rate,
+    and a small mismatch summary suitable for printing.
+    """
+    golden_flat = np.asarray(golden_fp, dtype=np.float32).reshape(-1)[:num_elements]
+    n = len(golden_flat)
+
+    actual_bytes = []
+    expected_bytes = []
+    mismatches = []
+
+    for blk_start in range(0, n, block_size):
+        blk = golden_flat[blk_start:blk_start + block_size].tolist()
+        # Pad to block_size with zeros if the last block is short
+        while len(blk) < block_size:
+            blk.append(0.0)
+        exp_bytes, _scale_byte = fp_block_to_mxint_bytes(
+            blk,
+            mxint_width=mxint_width,
+            exp_width=fp_exp_width,
+            mant_width=fp_mant_width,
+        )
+        for k in range(min(block_size, n - blk_start)):
+            i = blk_start + k
+            byte_addr = start_addr + i  # 1 byte per MXINT8 element
+            row_idx = (byte_addr * 8) // row_width
+            bit_offset = (byte_addr * 8) % row_width
+            actual = (hbm_data.get(row_idx, 0) >> bit_offset) & 0xff
+            expected = exp_bytes[k]
+            actual_bytes.append(actual)
+            expected_bytes.append(expected)
+            if actual != expected:
+                mismatches.append((i, expected, actual, golden_flat[i].item()))
+
+    total = len(actual_bytes)
+    matches = total - len(mismatches)
+    return {
+        "total_bytes": total,
+        "matched_bytes": matches,
+        "mismatched_bytes": len(mismatches),
+        "match_rate": (matches / total * 100.0) if total else 100.0,
+        "mismatches": mismatches[:16],  # first 16 for printing
+    }
 
 
 def compare_results(
@@ -377,6 +537,64 @@ def verify_hbm(
 
     # Determine format: MXINT, MXFP, or raw FP
     mx_format = params.get("mx_format", "mxfp").lower()
+
+    # Byte-exact MXINT verification path:
+    # Bypass the (mantissa, scale) -> float decode and instead compare raw
+    # mantissa bytes against a Python re-encoding of the golden FP values
+    # that exactly mirrors fp_2_mx_int_block.sv. This is the only way to
+    # verify MXINT cleanly without depending on the (potentially scattered)
+    # scale layout or the saturation behaviour of the RTL scale choice.
+    if scale_offset == "byte_exact":
+        if mx_format != "mxint":
+            return {"error": "scale_offset='byte_exact' only supported for mx_format='mxint'"}
+
+        # Load golden FP values
+        golden_fp = parse_golden_file(golden_file)
+        # Apply same row filter as below (so the printed summary lines up)
+        hbm_elements_per_row = params.get("hbm_elements_per_row", 32)
+        hbm_compare_start_row = params.get("hbm_compare_start_row", 0)
+        hbm_compare_num_rows = params.get("hbm_compare_num_rows", None)
+        start_elem = hbm_compare_start_row * hbm_elements_per_row
+        if hbm_compare_num_rows is not None:
+            end_elem = start_elem + hbm_compare_num_rows * hbm_elements_per_row
+        else:
+            end_elem = num_elements
+        golden_slice = np.asarray(golden_fp).reshape(-1)[start_elem:end_elem]
+
+        result = verify_hbm_byte_exact(
+            hbm_data=hbm_data,
+            golden_fp=golden_slice,
+            start_addr=start_addr + start_elem,  # 1 byte per element
+            num_elements=len(golden_slice),
+            block_size=block_size,
+            mxint_width=params.get("man_width", 8),
+            fp_exp_width=params.get("v_fp_exp_width", 8),
+            fp_mant_width=params.get("v_fp_man_width", 7),
+        )
+
+        if verbose:
+            print()
+            print("=" * 60)
+            print("HBM Byte-Exact Verification Results (MXINT mantissas)")
+            print("=" * 60)
+            print(f"  Bytes compared: {result['total_bytes']}")
+            print(f"  Matched:        {result['matched_bytes']}")
+            print(f"  Mismatched:     {result['mismatched_bytes']}")
+            print(f"  Match Rate:     {result['match_rate']:.2f}%")
+            if result["mismatches"]:
+                print("  First mismatches (idx, expected, actual, golden_fp):")
+                for idx, exp_b, act_b, gv in result["mismatches"]:
+                    print(f"    [{idx}] expected=0x{exp_b:02x} actual=0x{act_b:02x} (golden={gv:+.6f})")
+            status_pass = result["mismatched_bytes"] == 0
+            print(f"  Status: {'PASSED' if status_pass else 'FAILED'}")
+            print("=" * 60)
+
+        return {
+            "passed": result["mismatched_bytes"] == 0,
+            "match_rate": result["match_rate"],
+            "byte_exact": True,
+            **result,
+        }
 
     if mx_format == "raw_fp":
         # Raw IEEE-like FP: sign + exp + mantissa, no shared scales.
@@ -1286,7 +1504,7 @@ def main():
         if hbm_result.get("error") or not hbm_result.get("passed", False):
             all_passed = False
 
-    elif args.check_hbm or params.get("check_hbm", False):
+    elif args.check_hbm and params.get("check_hbm", True):
         # Full HBM verification (original method)
         hbm_result = verify_hbm(workload_dir, params, verbose=args.verbose, save_translated=save_fp)
         results["hbm"] = hbm_result

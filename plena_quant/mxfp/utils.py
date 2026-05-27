@@ -1,3 +1,4 @@
+from __future__ import annotations
 """MXFP-specific utility functions for floating point conversion."""
 
 import torch
