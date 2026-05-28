@@ -4,8 +4,8 @@ import numpy as np
 from plena_utils.torch_fp_conversion import pack_fp_to_bin
 from plena_utils.debugger import set_excepthook
 from plena_utils.logger import set_logging_verbosity, get_logger
-from quant.quantizer.hardware_quantizer import _mx_fp_quantize_hardware
-from quant.quantizer.hardware_quantizer.mxint import _mx_int_quantize_hardware
+from plena_quant.quantizer.hardware_quantizer import _mx_fp_quantize_hardware
+from plena_quant.quantizer.hardware_quantizer.mxint import _mx_int_quantize_hardware
 
 logger = get_logger("test_bin_mxfp")
 # set_logging_verbosity("debug")
