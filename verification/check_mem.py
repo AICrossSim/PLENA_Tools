@@ -1,3 +1,4 @@
+import json
 import os
 import re
 
@@ -7,36 +8,60 @@ import torch
 
 def parse_golden_output(golden_file_path):
     """
-    Parse the "Original Output" section from golden_result.txt.
+    Parse golden output values from golden_result.txt.
+
+    Supports two formats:
+    - Legacy text dump: an "Original Output: [...]" section with the values
+      printed inline.
+    - Compact format: a JSON header (``"format": "compact"``) whose actual
+      tensor is stored in a sidecar .pt file named by ``golden_output_file``;
+      the values are loaded from that tensor. Large native runs use this to
+      avoid dumping a 24k-element tensor as text.
 
     Args:
         golden_file_path: Path to the golden_result.txt file
 
     Returns:
-        numpy array: Flattened 1D array of all values from Original Output
+        numpy array: Flattened 1D array of all golden output values
     """
     with open(golden_file_path) as f:
         content = f.read()
 
-    # Find the "Original Output:" section. Matches from "Original Output: ["
-    # through the last "]" in the file (handles nested brackets for 2D+ tensors).
+    # Legacy text format: explicit "Original Output:" section. Matches from
+    # "Original Output: [" through the rest of the file (handles nested
+    # brackets for 2D+ tensors; the numeric parser strips brackets/commas).
     match = re.search(r"Original Output:\s*(.*)", content, re.DOTALL)
-    if not match:
-        raise ValueError("Could not find 'Original Output' section in golden file")
+    if match:
+        values_text = match.group(1)
+        # Parse all floating point numbers (negative, positive, scientific).
+        # The regex finds numeric tokens anywhere, so values adjacent to
+        # brackets or commas (e.g. "[-0.45" or "1.23]") are not dropped.
+        num_re = re.compile(r"-?\d+\.\d+(?:[eE][-+]?\d+)?|-?\d+(?:[eE][-+]?\d+)?")
+        values = [float(m) for m in num_re.findall(values_text)]
+        return np.array(values, dtype=np.float32)
 
-    # Extract the values section. Nested brackets and commas are stripped by the
-    # numeric parser below, so we keep everything after "Original Output:" (may
-    # include trailing sections — those will fail float() and be skipped).
-    values_text = match.group(1)
+    # Compact format: JSON header + tensor stored in a sidecar .pt file.
+    brace = content.find("{")
+    if brace != -1:
+        try:
+            meta = json.loads(content[brace:])
+        except json.JSONDecodeError:
+            meta = None
+        if meta is not None and meta.get("golden_output_file"):
+            pt_path = os.path.join(
+                os.path.dirname(os.path.abspath(golden_file_path)),
+                meta["golden_output_file"],
+            )
+            obj = torch.load(pt_path, map_location="cpu")
+            if not torch.is_tensor(obj):
+                if isinstance(obj, dict):
+                    obj = obj.get("original_output", next(iter(obj.values())))
+                else:
+                    obj = torch.as_tensor(obj)
+            arr = obj.detach().to(torch.float32).flatten().numpy()
+            return np.array(arr, dtype=np.float32)
 
-    # Parse all floating point numbers (handles negative, positive, scientific notation).
-    # Use a regex that finds numeric tokens anywhere — this handles values adjacent to
-    # brackets or commas (e.g. "[-0.45" at row start or "1.23]" at row end) which
-    # whitespace-split + float() would silently drop.
-    num_re = re.compile(r"-?\d+\.\d+(?:[eE][-+]?\d+)?|-?\d+(?:[eE][-+]?\d+)?")
-    values = [float(m) for m in num_re.findall(values_text)]
-
-    return np.array(values, dtype=np.float32)
+    raise ValueError("Could not find 'Original Output' section in golden file")
 
 
 def read_bin_file_as_array(
@@ -118,7 +143,7 @@ def read_bin_file_as_array(
     return np.array(values, dtype=np.float32)
 
 
-def reorder_stride_mode(data, num_batches=4, elements_per_batch=128, stride=64):
+def reorder_stride_mode(data, num_batches=4, elements_per_batch=128, stride=64, col_block_stride=None):
     """
     Reorder stride-mode data to batch-wise layout.
 
@@ -148,10 +173,16 @@ def reorder_stride_mode(data, num_batches=4, elements_per_batch=128, stride=64):
     chunk_size = stride  # Stride mode uses chunks of 'stride' elements (typically mlen=64)
     chunks_per_batch = elements_per_batch // stride
     total_chunks = len(data) // chunk_size
-    expected_chunks = num_batches * chunks_per_batch
+    # Column blocks of one batch are `col_block_stride` chunks apart. This equals
+    # num_batches only when physical_rows == logical rows (e.g. MLEN==seq_len). With
+    # tile-align padding (physical_rows > logical rows, e.g. MLEN=256, seq_len=64) the
+    # col blocks are PHYSICAL_ROWS chunks apart, so the caller passes physical_rows.
+    if col_block_stride is None:
+        col_block_stride = num_batches
+    expected_chunks = (chunks_per_batch - 1) * col_block_stride + num_batches
 
-    if total_chunks != expected_chunks:
-        print(f"Warning: Expected {expected_chunks} chunks, got {total_chunks}")
+    if total_chunks < expected_chunks:
+        print(f"Warning: Expected >= {expected_chunks} chunks, got {total_chunks}")
 
     # Reshape into chunks: [chunk0, chunk1, ..., chunk_n]
     chunks = data.reshape(total_chunks, chunk_size)
@@ -169,7 +200,7 @@ def reorder_stride_mode(data, num_batches=4, elements_per_batch=128, stride=64):
     print(f"chunks_per_batch: {chunks_per_batch}")
     for batch_idx in range(num_batches):
         for chunk_group in range(chunks_per_batch):
-            chunk_idx = chunk_group * num_batches + batch_idx
+            chunk_idx = chunk_group * col_block_stride + batch_idx
             reordered_chunks.append(chunks[chunk_idx])
 
     return np.concatenate(reordered_chunks)
@@ -215,6 +246,7 @@ def compare_vram_with_golden(
     rtol=0.2,
     use_slice_mode=False,
     slice_per_row=None,
+    physical_rows=None,
 ):
     """
     Compare VRAM binary file output with golden reference from golden_result.txt.
@@ -276,7 +308,18 @@ def compare_vram_with_golden(
     print(f"elements_per_batch: {elements_per_batch}")
     print(f"row_dim (stride): {row_dim}")
     if use_stride_mode:
-        simulated_np = reorder_stride_mode(simulated_np, num_batches, elements_per_batch, stride=row_dim)
+        simulated_np = reorder_stride_mode(
+            simulated_np, num_batches, elements_per_batch, stride=row_dim, col_block_stride=physical_rows
+        )
+        # The reordered data is num_batches × elements_per_batch (PADDED hidden), but the
+        # golden is num_batches × logical_hidden (the last column block may be only
+        # partially valid, e.g. hidden 384 padded to 512). Slice each batch down to the
+        # logical width so the flattened comparison stays token-aligned.
+        if num_batches and len(golden_np) % num_batches == 0:
+            valid_per_batch = len(golden_np) // num_batches
+            if 0 < valid_per_batch < elements_per_batch and len(simulated_np) >= num_batches * elements_per_batch:
+                sim2d = simulated_np[: num_batches * elements_per_batch].reshape(num_batches, elements_per_batch)
+                simulated_np = sim2d[:, :valid_per_batch].flatten()
 
     simulated_values = torch.from_numpy(simulated_np).bfloat16()
 
