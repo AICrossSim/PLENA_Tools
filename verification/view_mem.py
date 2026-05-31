@@ -344,6 +344,9 @@ if __name__ == "__main__":
             use_stride_mode=params.get("use_stride_mode", True),
             use_slice_mode=params.get("use_slice_mode", False),
             slice_per_row=params.get("slice_per_row", None),
+            # Forward physical_rows so stride mode uses col_block_stride=physical_rows
+            # (defaults to num_batches otherwise), matching the CI path in emulator_runner.
+            physical_rows=params.get("physical_rows"),
         )
         print_comparison_results(results, verbose=True, comparison_params=params)
 
