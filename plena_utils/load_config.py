@@ -181,6 +181,7 @@ def load_hardware_tile_sizes(definitions_path=None):
         "BLEN": config.get("BLEN", 8),
         "VLEN": config.get("VLEN", 16),
         "HLEN": config.get("HLEN", 8),
+        "HBM_V_Prefetch_Amount": config.get("HBM_V_Prefetch_Amount", 4),
     }
 
 
