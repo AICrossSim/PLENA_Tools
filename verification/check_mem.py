@@ -143,7 +143,9 @@ def read_bin_file_as_array(
     return np.array(values, dtype=np.float32)
 
 
-def reorder_stride_mode(data, num_batches=4, elements_per_batch=128, stride=64, col_block_stride=None):
+def reorder_stride_mode(
+    data, num_batches=4, elements_per_batch=128, stride=64, col_block_stride=None, rows_per_batch=None, active_seq=None
+):
     """
     Reorder stride-mode data to batch-wise layout.
 
@@ -179,7 +181,14 @@ def reorder_stride_mode(data, num_batches=4, elements_per_batch=128, stride=64, 
     # col blocks are PHYSICAL_ROWS chunks apart, so the caller passes physical_rows.
     if col_block_stride is None:
         col_block_stride = num_batches
-    expected_chunks = (chunks_per_batch - 1) * col_block_stride + num_batches
+    # For batch_size>1 the active token rows are rpb-strided (token t of batch b=t//active_seq
+    # lives at physical row b*rows_per_batch + t%active_seq), so the highest physical row read
+    # is not num_batches-1. Compute it from the rpb stride when present.
+    if rows_per_batch and active_seq:
+        max_row_off = ((num_batches - 1) // active_seq) * rows_per_batch + ((num_batches - 1) % active_seq)
+    else:
+        max_row_off = num_batches - 1
+    expected_chunks = (chunks_per_batch - 1) * col_block_stride + max_row_off + 1
 
     if total_chunks < expected_chunks:
         print(f"Warning: Expected >= {expected_chunks} chunks, got {total_chunks}")
@@ -198,9 +207,17 @@ def reorder_stride_mode(data, num_batches=4, elements_per_batch=128, stride=64, 
     print("chunks shape: {chunks.shape}")
     print(f"num_batches: {num_batches}")
     print(f"chunks_per_batch: {chunks_per_batch}")
-    for batch_idx in range(num_batches):
+    for token_idx in range(num_batches):
+        # token_idx is the golden's token-row index. For batch_size>1 the active rows are
+        # rpb-strided (batch b at physical row b*rows_per_batch + i); map token_idx to its
+        # physical row. Without rows_per_batch/active_seq (batch==1, or contiguous golden)
+        # this falls back to reading physical row == token_idx (unchanged behavior).
+        if rows_per_batch and active_seq:
+            row_off = (token_idx // active_seq) * rows_per_batch + (token_idx % active_seq)
+        else:
+            row_off = token_idx
         for chunk_group in range(chunks_per_batch):
-            chunk_idx = chunk_group * col_block_stride + batch_idx
+            chunk_idx = chunk_group * col_block_stride + row_off
             reordered_chunks.append(chunks[chunk_idx])
 
     return np.concatenate(reordered_chunks)
@@ -247,6 +264,8 @@ def compare_vram_with_golden(
     use_slice_mode=False,
     slice_per_row=None,
     physical_rows=None,
+    rows_per_batch=None,
+    active_seq=None,
 ):
     """
     Compare VRAM binary file output with golden reference from golden_result.txt.
@@ -309,7 +328,13 @@ def compare_vram_with_golden(
     print(f"row_dim (stride): {row_dim}")
     if use_stride_mode:
         simulated_np = reorder_stride_mode(
-            simulated_np, num_batches, elements_per_batch, stride=row_dim, col_block_stride=physical_rows
+            simulated_np,
+            num_batches,
+            elements_per_batch,
+            stride=row_dim,
+            col_block_stride=physical_rows,
+            rows_per_batch=rows_per_batch,
+            active_seq=active_seq,
         )
         # The reordered data is num_batches × elements_per_batch (PADDED hidden), but the
         # golden is num_batches × logical_hidden (the last column block may be only
