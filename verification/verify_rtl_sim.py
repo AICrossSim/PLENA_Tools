@@ -1165,8 +1165,9 @@ def main():
     parser = argparse.ArgumentParser(description="Verify RTL simulation results against golden reference")
     parser.add_argument("--workload-dir", type=str, required=True, help="Path to workload build directory")
     parser.add_argument("--verbose", "-v", action="store_true", help="Print detailed output")
-    parser.add_argument("--check-hbm", action="store_true", default=True, help="Check HBM contents (default: True)")
-    parser.add_argument("--check-vram", action="store_true", default=False, help="Check VRAM contents")
+    parser.add_argument("--check-hbm", action="store_true", default=None, help="Check HBM contents (overrides params file)")
+    parser.add_argument("--no-check-hbm", action="store_true", help="Disable HBM check (overrides params file)")
+    parser.add_argument("--check-vram", action="store_true", default=None, help="Check VRAM contents (overrides params file)")
     parser.add_argument(
         "--save-fp",
         action="store_true",
@@ -1259,15 +1260,30 @@ def main():
         if hbm_result.get("error") or not hbm_result.get("passed", False):
             all_passed = False
 
-    elif args.check_hbm or params.get("check_hbm", False):
-        # Full HBM verification (original method)
-        hbm_result = verify_hbm(workload_dir, params, verbose=args.verbose, save_translated=save_fp)
-        results["hbm"] = hbm_result
-        if hbm_result.get("error") or not hbm_result.get("passed", False):
-            all_passed = False
+    else:
+        # Determine if HBM check should run: CLI flag overrides params file
+        if args.no_check_hbm:
+            do_check_hbm = False
+        elif args.check_hbm:
+            do_check_hbm = True
+        else:
+            # No CLI flag specified, use params file (default True for backward compat)
+            do_check_hbm = params.get("check_hbm", True)
 
-    # VRAM verification
-    if args.check_vram or params.get("check_vram", False):
+        if do_check_hbm:
+            # Full HBM verification (original method)
+            hbm_result = verify_hbm(workload_dir, params, verbose=args.verbose, save_translated=save_fp)
+            results["hbm"] = hbm_result
+            if hbm_result.get("error") or not hbm_result.get("passed", False):
+                all_passed = False
+
+    # VRAM verification: CLI flag overrides params file
+    if args.check_vram is not None:
+        do_check_vram = args.check_vram
+    else:
+        do_check_vram = params.get("check_vram", False)
+
+    if do_check_vram:
         vram_result = verify_vram(workload_dir, params, verbose=args.verbose, save_fp_result=save_fp)
         results["vram"] = vram_result
         if vram_result.get("error") or not vram_result.get("passed", False):
