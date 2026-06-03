@@ -9,8 +9,13 @@ import torch.nn.functional as f
 def set_excepthook():
     def excepthook(exc_type, exc_value, exc_traceback):
         traceback.print_exception(exc_type, exc_value, exc_traceback)
-        print("\nEntering debugger...")
-        pdb.post_mortem(exc_traceback)
+        # Only drop into an interactive debugger when stdin is a real TTY.
+        # Under `docker compose run` / CI the process is non-interactive, and
+        # pdb.post_mortem would block reading a dead stdin, hanging the
+        # container instead of failing fast with the traceback above.
+        if sys.stdin is not None and sys.stdin.isatty():
+            print("\nEntering debugger...")
+            pdb.post_mortem(exc_traceback)
 
     sys.excepthook = excepthook
 

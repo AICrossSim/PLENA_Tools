@@ -57,7 +57,10 @@ def set_excepthook():
 
     def excepthook(exc_type, exc_value, exc_traceback):
         traceback.print_exception(exc_type, exc_value, exc_traceback)
-        print("\nEntering debugger...")
-        pdb.post_mortem(exc_traceback)
+        # Non-interactive (docker run / CI) → fail fast instead of blocking
+        # in pdb on a dead stdin. See plena_utils/debugger.py for rationale.
+        if sys.stdin is not None and sys.stdin.isatty():
+            print("\nEntering debugger...")
+            pdb.post_mortem(exc_traceback)
 
     sys.excepthook = excepthook
