@@ -238,7 +238,7 @@ def fp_to_signed_exp_mant(
     val: float,
     exp_width: int = 8,
     mant_width: int = 7,
-) -> Tuple[int, int]:
+) -> tuple[int, int]:
     """Mimic fp_ieee_partition.sv exactly.
 
     For an IEEE-like FP value with `exp_width` exponent bits and `mant_width`
@@ -280,12 +280,12 @@ def fp_to_signed_exp_mant(
 
 
 def fp_block_to_mxint_bytes(
-    fp_block: List[float],
+    fp_block: list[float],
     mxint_width: int = 8,
     exp_width: int = 8,
     mant_width: int = 7,
     scale_width: int = 8,
-) -> Tuple[List[int], int]:
+) -> tuple[list[int], int]:
     """Encode a block of FP values to MXINT mantissa bytes + scale byte.
 
     Mimics src/basic_components/conversion/rtl/fp_2_mx_int_block.sv exactly:
@@ -325,7 +325,7 @@ def fp_block_to_mxint_bytes(
 
 
 def verify_hbm_byte_exact(
-    hbm_data: Dict[int, int],
+    hbm_data: dict[int, int],
     golden_fp: np.ndarray,
     start_addr: int,
     num_elements: int,
@@ -334,7 +334,7 @@ def verify_hbm_byte_exact(
     fp_exp_width: int = 8,
     fp_mant_width: int = 7,
     row_width: int = 256,
-) -> Dict:
+) -> dict:
     """Byte-exact verification: compare HBM element bytes against a Python
     re-encoding of the golden FP values that mirrors fp_2_mx_int_block.sv.
 
