@@ -1028,6 +1028,52 @@ def verify_vram(
     if fp_output_file:
         result["fp_output_file"] = str(fp_output_file)
 
+    # --- No-op hard-FAIL guard -------------------------------------------------
+    # A correct result must match GOLDEN and must NOT merely echo the INPUT. If the
+    # simulated VRAM matches the input-in-VRAM-layout (the "noop" reference) while
+    # golden genuinely differs from that input, the kernel left the data untouched
+    # (e.g. a hung / half-run op that never wrote its output) -> hard FAIL, no matter
+    # how high the golden match rate looks. The guard is only meaningful when golden
+    # actually differs from the input; if golden ~= input (degenerate test data) a
+    # real near-identity op is indistinguishable from a no-op, so the guard stays
+    # inert. Workloads are designed (large per-row scaling) so golden != input.
+    noop_file_name = params.get("noop_vram_file")
+    if noop_file_name:
+        noop_path = workload_dir / noop_file_name
+        if not noop_path.exists():
+            noop_path = workload_dir / noop_file_name.replace(".pt", ".txt")
+        if noop_path.exists():
+            noop_all = parse_golden_file(noop_path)
+            if compare_start_elem_idx > 0 or compare_end_elem_idx < len(noop_all):
+                noop = noop_all[compare_start_elem_idx : min(compare_end_elem_idx, len(noop_all))]
+            else:
+                noop = noop_all
+            m = min(len(simulated), len(noop), len(golden))
+            if m > 0:
+                sim_m = np.asarray(simulated[:m], dtype=np.float32)
+                noop_m = np.asarray(noop[:m], dtype=np.float32)
+                gold_m = np.asarray(golden[:m], dtype=np.float32)
+                noop_tol = 0.1 + 0.1 * np.abs(noop_m)
+                sim_vs_noop = float(np.mean(np.abs(sim_m - noop_m) <= noop_tol) * 100.0)
+                golden_vs_input = float(np.mean(np.abs(gold_m - noop_m) > noop_tol) * 100.0)
+                result["noop_match_rate"] = sim_vs_noop
+                result["golden_vs_input_diff_rate"] = golden_vs_input
+                # Trip only when the data is genuinely transformable (golden differs
+                # from the input on most elements) yet sim still looks like the input.
+                if golden_vs_input >= 50.0 and sim_vs_noop >= 90.0:
+                    result["passed"] = False
+                    result["noop_detected"] = True
+                    result["noop_reason"] = (
+                        f"simulated VRAM matches the raw INPUT ({sim_vs_noop:.1f}% within tol) "
+                        f"while golden differs from the input on {golden_vs_input:.1f}% of "
+                        f"elements -> the operation did not transform the data "
+                        f"(no-op / incomplete run), even though golden match rate is "
+                        f"{result['match_rate']:.1f}%."
+                    )
+                    print("\n" + "!" * 60)
+                    print("NO-OP DETECTED (hard FAIL): " + result["noop_reason"])
+                    print("!" * 60)
+
     if verbose:
         print("\n" + "=" * 60)
         print("VRAM Verification Results")
